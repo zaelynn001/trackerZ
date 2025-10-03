@@ -1,0 +1,22 @@
+# Core UI framework
+PySide6==6.7.2
+
+# Database + utilities
+sqlite-utils>=3.36
+pytz>=2024.1
+tzlocal>=5.2
+
+# Reporting & export
+pandas>=2.2.2
+openpyxl>=3.1.5
+xlsxwriter>=3.2.0
+reportlab>=4.2.2
+pypdf2>=3.0.1
+
+# Packaging / build
+pyinstaller>=6.11.0
+
+# Dev & testing
+pytest>=8.3.3
+pytest-qt>=4.4.0
+
