@@ -1,7 +1,9 @@
+venv/
 .venv/
 __pycache__/
 *.pyc
 *.db
 .env
+*.sh
 # trackerZ logs
 .local/state/trackerZ/logs/

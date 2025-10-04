@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QLabel, QHeaderView, QMessageBox, QMenuBar, QMenu
 )
 from PySide6.QtGui import QAction
+from PySide6.QtCore import Qt
 
 from src.utils.logging_setup import init_logging
 from src.utils.config import load_settings, save_settings
