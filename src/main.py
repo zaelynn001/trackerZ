@@ -1,13 +1,12 @@
-# src/main.py
 import sys, logging
 from pathlib import Path
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem,
-    QLabel, QHeaderView, QMessageBox, QMenuBar, QMenu, QMessageBox
+    QLabel, QHeaderView, QMessageBox, QMenuBar, QMenu
 )
 from PySide6.QtGui import QAction
-from PySide6.QtCore import Qt
 
+from src.utils.logging_setup import init_logging
 from src.utils.config import load_settings, save_settings
 from src.models.dao import list_projects_flat
 from src.ui.project_overview import ProjectOverviewDialog
@@ -71,13 +70,13 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("trackerZ — Project Tracker (Project → Task → Subtask)")
+
         # Settings
         self._settings = load_settings()
         w = self._settings["main_window"]["width"]
         h = self._settings["main_window"]["height"]
         self.resize(w, h)
-        
-        # Menu bar with Diagnostics
+
         menubar = QMenuBar(self)
         self.setMenuBar(menubar)
 
@@ -87,11 +86,11 @@ class MainWindow(QMainWindow):
         act_diag = QAction("Diagnostics…", self)
         act_diag.triggered.connect(self._open_diagnostics)
         help_menu.addAction(act_diag)
+
         act_about = QAction("About", self)
         act_about.triggered.connect(self._about)
         help_menu.addAction(act_about)
 
-        # View menu for toggling dock
         view_menu = QMenu("&View", self)
         menubar.addMenu(view_menu)
         self.act_toggle_dock = QAction("Diagnostics Panel", self, checkable=True)
@@ -100,13 +99,13 @@ class MainWindow(QMainWindow):
 
         self.table = ProjectTable()
         self.setCentralWidget(self.table)
-        
-        # Diagnostics dock
+
         self.dock = DiagnosticsDock(self)
         self.addDockWidget(Qt.BottomDockWidgetArea, self.dock)
         dock_visible = bool(self._settings["ui"].get("diagnostics_dock_visible", True))
         self.dock.setVisible(dock_visible)
         self.act_toggle_dock.setChecked(dock_visible)
+
     def showEvent(self, event):
         super().showEvent(event)
         self.table.load()
@@ -114,7 +113,7 @@ class MainWindow(QMainWindow):
     def _open_diagnostics(self):
         dlg = DiagnosticsDialog(PROJECT_ROOT, parent=self)
         dlg.exec()
-        
+
     def _toggle_dock(self):
         vis = not self.dock.isVisible()
         self.dock.setVisible(vis)
@@ -127,7 +126,6 @@ class MainWindow(QMainWindow):
             "© 2025 — Internal tool")
 
     def closeEvent(self, event):
-        # Save simple settings
         self._settings["main_window"]["is_maximized"] = self.isMaximized()
         if not self.isMaximized():
             self._settings["main_window"]["width"] = self.width()
@@ -139,9 +137,7 @@ class MainWindow(QMainWindow):
             super().closeEvent(event)
 
 def main():
-    # Initialize logging first
     init_logging()
-
     app = QApplication(sys.argv)
     win = MainWindow()
     win.show()
