@@ -1,122 +1,282 @@
+# -*- coding: utf-8 -*-
+# File: src/ui/main_window.py
+# M04: UI shell — project picker → tasks list with filters and Total • Filtered counters.
+
 from __future__ import annotations
-from PySide6.QtCore import Qt, QThreadPool
+
+import os
+from typing import Optional
+
+from PySide6.QtCore import Qt, Slot, QEvent
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QComboBox, QLineEdit, QPushButton, QTableWidget, QTableWidgetItem,
-    QScrollArea, QFrame
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QLabel, QComboBox, QLineEdit, QTableWidget, QTableWidgetItem,
+    QHeaderView, QSizePolicy, QProgressBar, QMessageBox, QMenuBar, QMenu
 )
-from src.repositories.sqlite_task_repository import SqliteTaskRepository
-from src.viewmodels.tasks_viewmodel import TasksViewModel
+from PySide6.QtCore import QModelIndex
+from PySide6.QtGui import QAction
+
+from src.viewmodels.tasks_viewmodel import TasksViewModel, TaskRow
+from src.repositories.sqlite_phase_repository import SQLitePhaseRepository
+from src.repositories.sqlite_project_repository import SQLiteProjectRepository
+from src.models.db import get_connection
+from src.ui.project_overview import ProjectOverviewDialog
+from src.ui.diagnostics import DiagnosticsDialog
+
 
 class MainWindow(QMainWindow):
-    def __init__(self, db_path: str):
-        super().__init__()
-        self.setWindowTitle("trackerZ — Tasks")
-        self.resize(980, 700)
+    def __init__(self, db_path: Optional[str] = None, parent: Optional[QWidget] = None):
+        # IMPORTANT: parent must be a QWidget (or None), not a string.
+        super().__init__(parent)
 
-        # Repo + VM
-        self.repo = SqliteTaskRepository(db_path)
-        self.pool = QThreadPool.globalInstance()
-        self.vm = TasksViewModel(self.repo, self.pool)
+        # If app_launcher passes a DB path, expose it to the connection factory.
+        if db_path:
+            os.environ["TRACKERZ_DB"] = db_path
+        self._db_path = db_path
 
-        # UI
-        root = QWidget()
+        self.setWindowTitle("trackerZ — M04")
+        self.resize(1100, 700)
+        
+        # --- Menubar ---
+        menubar = QMenuBar(self)
+        self.setMenuBar(menubar)
+
+        view_menu = QMenu("&View", self)
+        menubar.addMenu(view_menu)
+        act_overview = QAction("Project Overview…", self)
+        act_overview.triggered.connect(self._openProjectOverview)
+        view_menu.addAction(act_overview)
+
+        help_menu = QMenu("&Help", self)
+        menubar.addMenu(help_menu)
+        act_diag = QAction("Diagnostics…", self)
+        act_diag.triggered.connect(self._openDiagnostics)
+        help_menu.addAction(act_diag)
+
+
+        # --- Repos to populate pickers ---
+        self._phase_repo = self._make_repo(SQLitePhaseRepository)
+        self._project_repo = self._make_repo(SQLiteProjectRepository)
+
+        # --- ViewModel ---
+        self.vm = TasksViewModel(self)
+        self.vm.countersChanged.connect(self._onCountersChanged)
+        self.vm.rowsChanged.connect(self._onRowsChanged)
+        self.vm.busyChanged.connect(self._onBusyChanged)
+
+        # --- Top bar: Project, Phase, Search, Counters ---
+        top = QWidget(self)
+        top_layout = QHBoxLayout(top)
+        top_layout.setContentsMargins(6, 6, 6, 6)
+        top_layout.setSpacing(10)
+
+        self.projectLabel = QLabel("Project:", top)
+        self.projectPicker = QComboBox(top)
+        self.projectPicker.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.projectPicker.currentIndexChanged.connect(self._onProjectChanged)
+        # Enable double-click on the closed combo box (field area)
+        self.projectPicker.installEventFilter(self)
+
+        self.phaseLabel = QLabel("Phase:", top)
+        self.phasePicker = QComboBox(top)
+        self.phasePicker.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.phasePicker.currentIndexChanged.connect(self._onPhaseChanged)
+
+        self.searchEdit = QLineEdit(top)
+        self.searchEdit.setPlaceholderText("Search tasks…")
+        self.searchEdit.returnPressed.connect(self._onSearch)
+        self.searchEdit.textEdited.connect(self._onSearchLive)
+
+        self.countersLabel = QLabel("Total: 0 • Filtered: 0", top)
+        self.countersLabel.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.busyBar = QProgressBar(top)
+        self.busyBar.setRange(0, 0)
+        self.busyBar.setVisible(False)
+        self.busyBar.setFixedWidth(120)
+
+        top_layout.addWidget(self.projectLabel)
+        top_layout.addWidget(self.projectPicker)
+        top_layout.addSpacing(12)
+        top_layout.addWidget(self.phaseLabel)
+        top_layout.addWidget(self.phasePicker)
+        top_layout.addSpacing(12)
+        top_layout.addWidget(self.searchEdit, 1)
+        top_layout.addSpacing(12)
+        top_layout.addWidget(self.countersLabel, 0, Qt.AlignRight)
+        top_layout.addWidget(self.busyBar)
+
+        # --- Table ---
+        self.table = QTableWidget(self)
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(["ID", "Title", "Phase", "Created", "Updated"])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.setSortingEnabled(False)
+        self.table.setSelectionBehavior(self.table.SelectionBehavior.SelectRows)
+        self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+
+        # --- Central layout ---
+        root = QWidget(self)
         root_layout = QVBoxLayout(root)
-
-        # Top bar: Project picker + search + counters
-        top = QHBoxLayout()
-        self.cboProject = QComboBox()
-        self.txtSearch = QLineEdit()
-        self.txtSearch.setPlaceholderText("Search title/description/task #")
-        self.lblCounters = QLabel("Total: 0 • Filtered: 0")
-        top.addWidget(QLabel("Project:"))
-        top.addWidget(self.cboProject, 1)
-        top.addSpacing(12)
-        top.addWidget(QLabel("Search:"))
-        top.addWidget(self.txtSearch, 2)
-        top.addStretch(1)
-        top.addWidget(self.lblCounters)
-        root_layout.addLayout(top)
-
-        # Phase filter chips
-        self.phaseBar = QHBoxLayout()
-        self.phaseBar.addWidget(QLabel("Phase:"))
-        self.btnAll = QPushButton("All")
-        self.btnAll.setCheckable(True); self.btnAll.setChecked(True)
-        self.phaseBar.addWidget(self.btnAll)
-        self.phaseButtons: list[QPushButton] = []
-        phaseWrap = QHBoxLayout()
-        root_layout.addLayout(self.phaseBar)
-
-        # Tasks table
-        self.tbl = QTableWidget(0, 6)
-        self.tbl.setHorizontalHeaderLabels(["#", "Title", "Phase", "Priority", "Created (UTC)", "Updated (UTC)"])
-        self.tbl.verticalHeader().setVisible(False)
-        self.tbl.setSelectionBehavior(self.tbl.SelectRows)
-        self.tbl.setEditTriggers(self.tbl.NoEditTriggers)
-        root_layout.addWidget(self.tbl, 1)
-
+        root_layout.setContentsMargins(6, 6, 6, 6)
+        root_layout.setSpacing(6)
+        root_layout.addWidget(top)
+        root_layout.addWidget(self.table, 1)
         self.setCentralWidget(root)
 
-        # Wire signals
-        self.vm.projectsChanged.connect(self._on_projects)
-        self.vm.phasesChanged.connect(self._on_phases)
-        self.vm.tasksChanged.connect(self._on_tasks)
+        # Populate pickers & kick first load
+        self._populateProjects()
+        self._populatePhases()
+        self._triggerInitialLoad()
+        
+        # Enable: double-click a project in the combo’s popup to open overview
+        try:
+            view = self.projectPicker.view()  # QListView backing the QComboBox popup
+            if view is not None:
+                view.doubleClicked.connect(self._onProjectDoubleClicked)
+        except Exception:
+            # Non-fatal: some styles may not expose a view until first show
+            pass
 
-        self.cboProject.currentIndexChanged.connect(self._on_project_changed)
-        self.txtSearch.textChanged.connect(self.vm.set_search)
-        self.btnAll.clicked.connect(lambda: self._select_phase(None))
+        
+    # ---------- Helpers ----------
+    def _make_repo(self, repo_cls):
+        """
+        Some repos in your tree accept (conn_factory=...), others accept (db_path=...),
+        and a few are no-arg. Try all three safely.
+        """
+        # 1) Try conn_factory
+        try:
+            return repo_cls(conn_factory=get_connection)  # type: ignore[arg-type]
+        except TypeError:
+            pass
+        except ValueError:
+            # e.g., SQLitePhaseRepository explicitly raises ValueError for bad args
+            pass
 
-        # Bootstrap
-        self.vm.bootstrap()
+        # 2) Try db_path (if provided)
+        if getattr(self, "_db_path", None):
+            try:
+                return repo_cls(db_path=self._db_path)  # type: ignore[arg-type]
+            except TypeError:
+                pass
+            except ValueError:
+                pass
 
-    # ----- Slots -----
-    def _on_projects(self, projects: list[dict]):
-        self.cboProject.blockSignals(True)
-        self.cboProject.clear()
-        for p in projects:
-            self.cboProject.addItem(f"{p['project_number']} — {p['title']}", p["id"])
-        self.cboProject.blockSignals(False)
+        # 3) Fall back to no-arg constructor
+        return repo_cls()
 
-    def _on_phases(self, phases: list[str]):
-        # build phase chip buttons
-        # clear old (except "All")
-        for b in self.phaseButtons:
-            b.setParent(None)
-        self.phaseButtons.clear()
-        for name in phases:
-            btn = QPushButton(name)
-            btn.setCheckable(True)
-            btn.clicked.connect(lambda checked, n=name: self._select_phase(n if checked else None))
-            self.phaseBar.addWidget(btn)
-            self.phaseButtons.append(btn)
 
-    def _on_tasks(self, tasks: list[dict], total_count: int):
-        self.tbl.setRowCount(len(tasks))
-        for row, t in enumerate(tasks):
-            self.tbl.setItem(row, 0, QTableWidgetItem(t["task_number"]))
-            self.tbl.setItem(row, 1, QTableWidgetItem(t["title"] or ""))
-            self.tbl.setItem(row, 2, QTableWidgetItem(t["phase"]))
-            self.tbl.setItem(row, 3, QTableWidgetItem(t["priority"] or ""))
-            self.tbl.setItem(row, 4, QTableWidgetItem(t["created_at_utc"]))
-            self.tbl.setItem(row, 5, QTableWidgetItem(t["updated_at_utc"]))
-        self.lblCounters.setText(f"Total: {total_count} • Filtered: {len(tasks)}")
+    # ---------- Populate pickers ----------
 
-    def _on_project_changed(self, index: int):
-        pid = self.cboProject.itemData(index)
-        if pid is not None:
-            self.btnAll.setChecked(True)
-            for b in self.phaseButtons: b.setChecked(False)
-            self.vm.set_project(pid)
+    def _populateProjects(self) -> None:
+        self.projectPicker.blockSignals(True)
+        self.projectPicker.clear()
+        self.projectPicker.addItem("— Select Project —", userData=None)
+        for proj in self._project_repo.list_all_projects():
+            self.projectPicker.addItem(proj["title"], userData=proj["id"])
+        self.projectPicker.blockSignals(False)
 
-    def _select_phase(self, phase: str | None):
-        # toggle chips: exclusive behavior with "All"
-        if phase is None:
-            self.btnAll.setChecked(True)
-            for b in self.phaseButtons: b.setChecked(False)
+    def _populatePhases(self) -> None:
+        self.phasePicker.blockSignals(True)
+        self.phasePicker.clear()
+        self.phasePicker.addItem("All phases", userData=None)
+        for ph in self._phase_repo.list_all_phases():
+            self.phasePicker.addItem(ph["name"], userData=ph["id"])
+        self.phasePicker.blockSignals(False)
+
+    # ---------- Event handlers ----------
+
+    @Slot()
+    def _triggerInitialLoad(self) -> None:
+        if self.projectPicker.count() > 1:
+            self.projectPicker.setCurrentIndex(1)
         else:
-            self.btnAll.setChecked(False)
-            for b in self.phaseButtons:
-                b.setChecked(b.text() == phase)
-        self.vm.set_phase(phase)
+            self.vm.refresh()
+            
+
+    # ---------- Double-click handlers ----------
+    def eventFilter(self, obj, event):
+        if obj is self.projectPicker and event.type() == QEvent.MouseButtonDblClick:
+            self._openProjectOverview()
+            return True
+        return super().eventFilter(obj, event)
+
+    @Slot()
+    def _onProjectListDoubleClicked(self, index):
+        # Sync selection to the item double-clicked in the popup list
+        try:
+            row = index.row()
+            if 0 <= row < self.projectPicker.count():
+                self.projectPicker.setCurrentIndex(row)
+        except Exception:
+            pass
+        self._openProjectOverview()
+
+    def _openProjectOverview(self) -> None:
+        project_id = self.projectPicker.currentData()
+        if project_id is None:
+            QMessageBox.information(self, "Project Overview", "Please select a project first.")
+            return
+        dlg = ProjectOverviewDialog(int(project_id), parent=self)
+        dlg.exec()
+        # If the overview can change tasks, refresh afterwards
+        self.vm.refresh()
+
+    def _openDiagnostics(self) -> None:
+        try:
+            # PROJECT_ROOT discovery: up two parents from this file
+            from pathlib import Path
+            project_root = Path(__file__).resolve().parents[2]
+            dlg = DiagnosticsDialog(project_root, parent=self)
+            dlg.exec()
+        except Exception as e:
+            QMessageBox.critical(self, "Diagnostics", f"Failed to open diagnostics: {e}")
+
+    @Slot(int)
+    def _onProjectChanged(self, index: int) -> None:
+        project_id = self.projectPicker.currentData()
+        if project_id is None:
+            self.vm.setProject(None)  # type: ignore[arg-type]
+            return
+        self.vm.setProject(int(project_id))
+
+    @Slot(int)
+    def _onPhaseChanged(self, index: int) -> None:
+        phase_id = self.phasePicker.currentData()
+        if phase_id is None:
+            self.vm.setPhaseFilter(None)
+        else:
+            self.vm.setPhaseFilter(int(phase_id))
+
+    @Slot()
+    def _onSearch(self) -> None:
+        self.vm.setSearch(self.searchEdit.text())
+
+    @Slot(str)
+    def _onSearchLive(self, _text: str) -> None:
+        self.vm.setSearch(self.searchEdit.text())
+
+    # ---------- VM signal handlers ----------
+
+    @Slot(int, int)
+    def _onCountersChanged(self, total: int, filtered: int) -> None:
+        self.countersLabel.setText(f"Total: {total} • Filtered: {filtered}")
+
+    @Slot(list)
+    def _onRowsChanged(self, rows: list[TaskRow]) -> None:
+        self.table.setRowCount(len(rows))
+        for r, row in enumerate(rows):
+            self.table.setItem(r, 0, QTableWidgetItem(str(row.id)))
+            self.table.setItem(r, 1, QTableWidgetItem(row.title))
+            self.table.setItem(r, 2, QTableWidgetItem(row.phase))
+            self.table.setItem(r, 3, QTableWidgetItem(row.created_at or ""))
+            self.table.setItem(r, 4, QTableWidgetItem(row.updated_at or ""))
+
+    @Slot(bool)
+    def _onBusyChanged(self, busy: bool) -> None:
+        self.busyBar.setVisible(busy)
 

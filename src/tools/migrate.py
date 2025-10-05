@@ -1,189 +1,329 @@
+# File: src/tools/migrate.py
+# Python 3.12+
+# Usage examples:
+#   python -m src.tools.migrate up
+#   python -m src.tools.migrate status
+#   python -m src.tools.migrate rebuild --seed
+#   python -m src.tools.migrate up --db /path/to/tracker.db
+#
+# Notes:
+# - DB path defaults to env TRACKERZ_DB or data/tracker.db
+# - Applies data/schema.sql on rebuild or if DB is empty
+# - Applies data/migrations/*.sql in lexicographic order
+# - Records applied migrations (name + sha256) in schema_migrations
+# - Seeds from data/seed.sql or data/seeds.sql when --seed is given
+
+from __future__ import annotations
+
 import argparse
 import hashlib
 import os
-import re
-import shutil
 import sqlite3
-from datetime import datetime
+import sys
+from datetime import datetime, timezone
+from glob import glob
 from pathlib import Path
+from typing import Iterable, Optional, Tuple
 
-# Where the project lives
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DB_DEFAULT = PROJECT_ROOT / "data" / "tracker.db"
-MIGRATIONS_DIR = PROJECT_ROOT / "data" / "migrations"
-BACKUPS_DIR = PROJECT_ROOT / "data" / "backups"
-SCHEMA_SQL = PROJECT_ROOT / "data" / "schema.sql"
+ROOT = Path(__file__).resolve().parents[2]  # repo root
+DEFAULT_DB = Path(os.environ.get("TRACKERZ_DB", ROOT / "data" / "tracker.db"))
+DEFAULT_SCHEMA = ROOT / "data" / "schema.sql"
+DEFAULT_MIGRATIONS_DIR = ROOT / "data" / "migrations"
+DEFAULT_SEED_FILES = [ROOT / "data" / "seed.sql", ROOT / "data" / "seeds.sql"]
 
-VERSION_RE = re.compile(r"^(\d{4})_(.+)\.sql$")
 
-def db_path() -> Path:
-    env = os.environ.get("TRACKERZ_DB")
-    return Path(env) if env else DB_DEFAULT
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-def sha256_text(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
-def ensure_dirs():
-    MIGRATIONS_DIR.mkdir(parents=True, exist_ok=True)
-    BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+def sha256_bytes(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
 
-def open_db(path: Path) -> sqlite3.Connection:
-    if not path.exists():
-        raise FileNotFoundError(f"DB not found: {path}")
-    conn = sqlite3.connect(path)
+
+def read_text(path: Path) -> str:
+    with path.open("r", encoding="utf-8") as f:
+        return f.read()
+
+
+def ensure_parent_dir(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def connect(db_path: Path) -> sqlite3.Connection:
+    ensure_parent_dir(db_path)
+    conn = sqlite3.connect(db_path)
+    conn.isolation_level = None  # we'll manage transactions
     conn.execute("PRAGMA foreign_keys = ON;")
+    # journaling & perf pragmas
+    conn.execute("PRAGMA journal_mode = WAL;")
+    conn.execute("PRAGMA synchronous = NORMAL;")
+    conn.execute("PRAGMA temp_store = MEMORY;")
+    conn.execute("PRAGMA busy_timeout = 5000;")
     return conn
 
-def ensure_migrations_table(conn: sqlite3.Connection):
-    conn.execute("""
+
+def exec_script(conn: sqlite3.Connection, sql_text: str) -> None:
+    # Use executescript inside an explicit transaction for safety.
+    conn.execute("BEGIN;")
+    try:
+        conn.executescript(sql_text)
+    except Exception:
+        conn.execute("ROLLBACK;")
+        raise
+    else:
+        conn.execute("COMMIT;")
+
+
+def ensure_migrations_table(conn: sqlite3.Connection) -> None:
+    exec_script(
+        conn,
+        """
         CREATE TABLE IF NOT EXISTS schema_migrations (
-            version TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            checksum TEXT NOT NULL,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            filename TEXT NOT NULL UNIQUE,
+            sha256 TEXT NOT NULL,
             applied_at_utc TEXT NOT NULL
         );
-    """)
-    conn.commit()
+        """,
+    )
 
-def list_files():
-    files = []
-    for p in sorted(MIGRATIONS_DIR.glob("*.sql")):
-        m = VERSION_RE.match(p.name)
-        if not m:
-            continue
-        version, name = m.group(1), m.group(2)
-        files.append((version, name, p))
+
+def get_applied(conn: sqlite3.Connection) -> dict[str, Tuple[str, str]]:
+    cur = conn.execute(
+        "SELECT filename, sha256, applied_at_utc FROM schema_migrations ORDER BY filename;"
+    )
+    rows = cur.fetchall()
+    return {r[0]: (r[1], r[2]) for r in rows}
+
+
+def list_migration_files(migrations_dir: Path) -> list[Path]:
+    files = sorted(Path(migrations_dir).glob("*.sql"))
     return files
 
-def read_file(p: Path) -> str:
-    return p.read_text(encoding="utf-8")
 
-def get_applied(conn: sqlite3.Connection):
-    rows = conn.execute("SELECT version, name, checksum, applied_at_utc FROM schema_migrations ORDER BY version").fetchall()
-    return {r[0]: {"name": r[1], "checksum": r[2], "applied_at_utc": r[3]} for r in rows}
+def db_is_empty(conn: sqlite3.Connection) -> bool:
+    cur = conn.execute(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%';"
+    )
+    (count,) = cur.fetchone()
+    return count == 0
 
-def backup_db(path: Path) -> Path:
-    ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-    dest = BACKUPS_DIR / f"backup-{ts}.db"
-    shutil.copy2(path, dest)
-    return dest
 
-def apply_one(conn: sqlite3.Connection, version: str, name: str, sql_text: str, checksum: str):
-    with conn:
-        conn.executescript(sql_text)
-        conn.execute("""
-            INSERT INTO schema_migrations (version, name, checksum, applied_at_utc)
-            VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-        """, (version, name, checksum))
+def apply_schema_if_needed(conn: sqlite3.Connection, schema_path: Path, force: bool) -> bool:
+    if force or db_is_empty(conn):
+        if not schema_path.exists():
+            raise FileNotFoundError(f"schema.sql not found at: {schema_path}")
+        print(f"→ Applying schema: {schema_path}")
+        exec_script(conn, read_text(schema_path))
+        return True
+    return False
 
-def init_from_schema():
-    """Create 0001_base.sql from data/schema.sql if migrations are empty."""
-    files = list_files()
-    if files:
-        print("Migrations directory is not empty; refusing to init from schema.")
-        return 2
-    if not SCHEMA_SQL.exists():
-        print(f"Missing schema file: {SCHEMA_SQL}")
-        return 2
-    target = MIGRATIONS_DIR / "0001_base.sql"
-    target.write_text(SCHEMA_SQL.read_text(encoding="utf-8"), encoding="utf-8")
-    print(f"Created {target} from schema.sql")
-    return 0
 
-def do_list(conn: sqlite3.Connection):
-    applied = get_applied(conn)
-    files = list_files()
-    if not files:
-        print("(no migration files)")
-        return 0
-    for version, name, p in files:
-        tag = "[APPLIED]" if version in applied else "[PENDING]"
-        print(f"{tag} {version} {name}  {p.name}")
-    return 0
-
-def do_fake(conn: sqlite3.Connection, target: str):
-    files = list_files()
-    target_file = None
-    for version, name, p in files:
-        if version == target:
-            target_file = (version, name, p)
-            break
-    if not target_file:
-        print(f"Version {target} not found.")
-        return 2
-    version, name, p = target_file
-    checksum = sha256_text(read_file(p))
-    with conn:
-        conn.execute("""
-            INSERT OR REPLACE INTO schema_migrations (version, name, checksum, applied_at_utc)
-            VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%SZ','now'))
-        """, (version, name, checksum))
-    print(f"Faked {version}_{name} as applied.")
-    return 0
-
-def do_apply(conn: sqlite3.Connection, target: str | None):
-    files = list_files()
-    if not files:
-        print("No migration files to apply.")
-        return 0
-
-    applied = get_applied(conn)
-    to_apply = []
-    for version, name, p in files:
-        if version in applied:
-            continue
-        to_apply.append((version, name, p))
-        if target and version == target:
-            break
-
-    if not to_apply:
-        print("Nothing to apply.")
-        return 0
-
-    dbfile = db_path()
-    bkp = backup_db(dbfile)
-    print(f"Backup created: {bkp}")
-
-    for version, name, p in to_apply:
-        sql_text = read_file(p)
-        checksum = sha256_text(sql_text)
-        print(f"Applying {version}_{name} ...")
-        apply_one(conn, version, name, sql_text, checksum)
-        print(f"OK {version}_{name}")
-    return 0
-
-def main():
-    parser = argparse.ArgumentParser(description="trackerZ SQLite migration runner")
-    parser.add_argument("--db", type=Path, default=None, help="Path to tracker.db (defaults to env TRACKERZ_DB or data/tracker.db)")
-    parser.add_argument("--list", action="store_true", help="List migrations and status")
-    parser.add_argument("--apply", action="store_true", help="Apply all pending migrations")
-    parser.add_argument("--target", type=str, help="Apply up to this version (e.g., 0003)")
-    parser.add_argument("--fake", type=str, metavar="VERSION", help="Mark VERSION as applied without running")
-    parser.add_argument("--init-from-schema", action="store_true", help="Bootstrap 0001_base.sql from data/schema.sql")
-
-    args = parser.parse_args()
-    ensure_dirs()
-
-    if args.init_from_schema:
-        return init_from_schema()
-
-    # choose DB
-    path = args.db if args.db else db_path()
-    conn = open_db(path)
+def apply_migrations(
+    conn: sqlite3.Connection, migrations: Iterable[Path], stop_on_changed_hash: bool = False
+) -> list[str]:
     ensure_migrations_table(conn)
+    applied = get_applied(conn)
+    applied_now: list[str] = []
 
-    if args.list:
-        return do_list(conn)
+    for path in migrations:
+        name = path.name
+        sql = read_text(path)
+        digest = sha256_bytes(sql.encode("utf-8"))
 
-    if args.fake:
-        return do_fake(conn, args.fake)
+        if name in applied:
+            recorded_hash, when = applied[name]
+            if recorded_hash != digest:
+                msg = (
+                    f"⚠️  Hash changed for already applied migration {name}.\n"
+                    f"    recorded={recorded_hash}\n"
+                    f"    current ={digest}\n"
+                    "    This suggests the file was edited after application."
+                )
+                if stop_on_changed_hash:
+                    raise RuntimeError(msg)
+                else:
+                    print(msg)
+            # skip re-apply
+            continue
 
-    if args.apply or args.target:
-        return do_apply(conn, args.target)
+        print(f"→ Applying migration: {name}")
+        exec_script(conn, sql)
+        conn.execute(
+            "INSERT INTO schema_migrations (filename, sha256, applied_at_utc) VALUES (?, ?, ?);",
+            (name, digest, utc_now_iso()),
+        )
+        applied_now.append(name)
 
-    # default: show help
-    parser.print_help()
-    return 0
+    return applied_now
+
+
+def seed_if_requested(conn: sqlite3.Connection, seed_files: list[Path]) -> Optional[Path]:
+    for path in seed_files:
+        if path.exists():
+            print(f"→ Seeding from: {path}")
+            exec_script(conn, read_text(path))
+            return path
+    return None
+
+
+def cmd_status(db: Path, migrations_dir: Path) -> int:
+    conn = connect(db)
+    try:
+        ensure_migrations_table(conn)
+        applied = get_applied(conn)
+        mig_files = list_migration_files(migrations_dir)
+
+        print(f"DB: {db}")
+        print(f"Migrations dir: {migrations_dir}")
+        print(f"Applied count: {len(applied)}")
+        for name, (h, when) in applied.items():
+            print(f"  ✔ {name}  ({when})")
+
+        pending = [p.name for p in mig_files if p.name not in applied]
+        if pending:
+            print(f"Pending count: {len(pending)}")
+            for name in pending:
+                print(f"  ⧗ {name}")
+        else:
+            print("Pending count: 0")
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_up(db: Path, schema: Path, migrations_dir: Path, seed: bool) -> int:
+    conn = connect(db)
+    try:
+        created = apply_schema_if_needed(conn, schema, force=False)
+        ensure_migrations_table(conn)
+        pending = apply_migrations(conn, list_migration_files(migrations_dir))
+        if created or pending:
+            print("✓ Database is up to date.")
+        else:
+            print("✓ No changes. Database already up to date.")
+        if seed:
+            seeded = seed_if_requested(conn, DEFAULT_SEED_FILES)
+            if not seeded:
+                print("ℹ️  Seed requested but no seed.sql/seeds.sql found.")
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_rebuild(db: Path, schema: Path, migrations_dir: Path, seed: bool) -> int:
+    # Drop DB file and rebuild from schema + migrations
+    if db.exists():
+        print(f"⟲ Rebuilding: removing existing DB {db}")
+        db.unlink()
+    conn = connect(db)
+    try:
+        apply_schema_if_needed(conn, schema, force=True)
+        ensure_migrations_table(conn)
+        apply_migrations(conn, list_migration_files(migrations_dir))
+        if seed:
+            seeded = seed_if_requested(conn, DEFAULT_SEED_FILES)
+            if not seeded:
+                print("ℹ️  Seed requested but no seed.sql/seeds.sql found.")
+        print("✓ Rebuild complete.")
+        return 0
+    finally:
+        conn.close()
+
+
+def cmd_verify(db: Path) -> int:
+    conn = connect(db)
+    try:
+        # Minimal structural assertions that reflect your roadmap (M2/M3)
+        required_tables = [
+            "projects",
+            "tasks",
+            "subtasks",
+            "task_updates",
+            "subtask_updates",
+            "phases",
+            "phase_transitions",
+            "attachments",
+            "purchases",
+            "expenses",
+            "settings",
+            "schema_migrations",
+        ]
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%';"
+        )
+        names = {r[0] for r in cur.fetchall()}
+        missing = [t for t in required_tables if t not in names]
+        if missing:
+            print("❌ Missing tables:", ", ".join(missing))
+            return 2
+
+        # Check a couple of triggers exist (names can be adjusted to yours)
+        expected_triggers = [
+            "trg_tasks_phase_validate",
+            "trg_subtasks_phase_validate",
+            "trg_tasks_touch_updated_at_on_phase",
+            "trg_subtasks_touch_updated_at_on_phase",
+        ]
+        cur = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='trigger';"
+        )
+        trig = {r[0] for r in cur.fetchall()}
+        trig_missing = [t for t in expected_triggers if t not in trig]
+        if trig_missing:
+            print("❌ Missing triggers:", ", ".join(trig_missing))
+            return 3
+
+        # journal mode
+        (mode,) = conn.execute("PRAGMA journal_mode;").fetchone()
+        if str(mode).lower() != "wal":
+            print(f"❌ journal_mode is not WAL (got {mode})")
+            return 4
+
+        print("✓ Verification passed.")
+        return 0
+    finally:
+        conn.close()
+
+
+def parse_args(argv: list[str]) -> argparse.Namespace:
+    p = argparse.ArgumentParser(prog="trackerZ-migrate", description="SQLite migration runner for trackerZ")
+    sub = p.add_subparsers(dest="cmd", required=True)
+
+    def add_common(sp: argparse.ArgumentParser):
+        sp.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"Path to SQLite DB (default: {DEFAULT_DB})")
+        sp.add_argument("--schema", type=Path, default=DEFAULT_SCHEMA, help=f"Path to schema.sql (default: {DEFAULT_SCHEMA})")
+        sp.add_argument("--migrations-dir", type=Path, default=DEFAULT_MIGRATIONS_DIR, help=f"Migrations directory (default: {DEFAULT_MIGRATIONS_DIR})")
+
+    s_up = sub.add_parser("up", help="Apply schema if empty and run pending migrations")
+    add_common(s_up)
+    s_up.add_argument("--seed", action="store_true", help="Seed after applying")
+
+    s_rebuild = sub.add_parser("rebuild", help="Drop and recreate DB from schema + migrations")
+    add_common(s_rebuild)
+    s_rebuild.add_argument("--seed", action="store_true", help="Seed after rebuild")
+
+    s_status = sub.add_parser("status", help="Show applied and pending migrations")
+    add_common(s_status)
+
+    s_verify = sub.add_parser("verify", help="Lightweight structural verification")
+    s_verify.add_argument("--db", type=Path, default=DEFAULT_DB, help=f"Path to SQLite DB (default: {DEFAULT_DB})")
+
+    return p.parse_args(argv)
+
+
+def main(argv: Optional[list[str]] = None) -> int:
+    ns = parse_args(argv or sys.argv[1:])
+    if ns.cmd == "status":
+        return cmd_status(ns.db, ns.migrations_dir)
+    if ns.cmd == "up":
+        return cmd_up(ns.db, ns.schema, ns.migrations_dir, ns.seed)
+    if ns.cmd == "rebuild":
+        return cmd_rebuild(ns.db, ns.schema, ns.migrations_dir, ns.seed)
+    if ns.cmd == "verify":
+        return cmd_verify(ns.db)
+    raise SystemExit(1)
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

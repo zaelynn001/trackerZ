@@ -29,6 +29,8 @@ from typing import Iterable, Optional, Dict, List
 
 from datetime import datetime, timezone
 
+from src.models.db import get_connection
+
 
 def _utcnow_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -99,6 +101,8 @@ class SQLitePhaseRepository:
         cols = ", ".join(values.keys())
         qmarks = ", ".join(["?"] * len(values))
         con.execute(f"INSERT INTO {table}({cols}) VALUES ({qmarks})", tuple(values.values()))
+        
+
 
     # ---------- Tasks ----------
 
@@ -281,4 +285,15 @@ class SQLitePhaseRepository:
                 (current_phase_id,),
             )
             return [int(r["to_phase_id"]) for r in cur.fetchall()]
+    @staticmethod
+    def _dict_factory(cursor, row):
+        """Return SQLite rows as dicts."""
+        return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+
+    def list_all_phases(self) -> list[dict]:
+        sql = "SELECT id, name FROM phases ORDER BY id ASC;"
+        with self._connect() as con:
+            con.row_factory = self._dict_factory
+            cur = con.execute(sql)
+            return cur.fetchall()
 
