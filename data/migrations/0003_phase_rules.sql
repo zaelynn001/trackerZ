@@ -1,33 +1,61 @@
--- 0003-phase-rules.sql
--- Enforce allowed phase transitions via phases/phase_transitions (no manager gating)
--- SQLite dialect
+-- data/migrations/0003_phase_rules.sql
+-- Canonical phase rules & touch triggers
+-- Safe to re-run if guards exist.
 
-BEGIN IMMEDIATE TRANSACTION;
+BEGIN;
 
-PRAGMA foreign_keys = ON;
+-- Ensure canonical phases exist (idempotent inserts)
+INSERT INTO phases(id, name)
+SELECT 1, 'Open'
+WHERE NOT EXISTS (SELECT 1 FROM phases WHERE id=1);
 
-----------------------------------------------------------------------
--- Diagnostic views (optional)
-----------------------------------------------------------------------
+INSERT INTO phases(id, name)
+SELECT 2, 'In Progress'
+WHERE NOT EXISTS (SELECT 1 FROM phases WHERE id=2);
 
-DROP VIEW IF EXISTS v_invalid_task_phase_fk;
-CREATE VIEW v_invalid_task_phase_fk AS
-SELECT t.id, t.phase_id
-FROM tasks t
-LEFT JOIN phases ph ON ph.id = t.phase_id
-WHERE ph.id IS NULL;
+INSERT INTO phases(id, name)
+SELECT 3, 'In Hiatus'
+WHERE NOT EXISTS (SELECT 1 FROM phases WHERE id=3);
 
-DROP VIEW IF EXISTS v_invalid_subtask_phase_fk;
-CREATE VIEW v_invalid_subtask_phase_fk AS
-SELECT s.id, s.phase_id
-FROM subtasks s
-LEFT JOIN phases ph ON ph.id = s.phase_id
-WHERE ph.id IS NULL;
+INSERT INTO phases(id, name)
+SELECT 4, 'Resolved'
+WHERE NOT EXISTS (SELECT 1 FROM phases WHERE id=4);
 
-----------------------------------------------------------------------
--- Tasks: validate phase transitions before update
-----------------------------------------------------------------------
+INSERT INTO phases(id, name)
+SELECT 5, 'Closed'
+WHERE NOT EXISTS (SELECT 1 FROM phases WHERE id=5);
 
+-- Allowed transitions (idempotent)
+INSERT INTO phase_transitions(from_phase_id, to_phase_id)
+SELECT 1, 2
+WHERE NOT EXISTS (SELECT 1 FROM phase_transitions WHERE from_phase_id=1 AND to_phase_id=2);
+
+INSERT INTO phase_transitions(from_phase_id, to_phase_id)
+SELECT 2, 3
+WHERE NOT EXISTS (SELECT 1 FROM phase_transitions WHERE from_phase_id=2 AND to_phase_id=3);
+
+INSERT INTO phase_transitions(from_phase_id, to_phase_id)
+SELECT 2, 4
+WHERE NOT EXISTS (SELECT 1 FROM phase_transitions WHERE from_phase_id=2 AND to_phase_id=4);
+
+INSERT INTO phase_transitions(from_phase_id, to_phase_id)
+SELECT 3, 2
+WHERE NOT EXISTS (SELECT 1 FROM phase_transitions WHERE from_phase_id=3 AND to_phase_id=2);
+
+INSERT INTO phase_transitions(from_phase_id, to_phase_id)
+SELECT 4, 5
+WHERE NOT EXISTS (SELECT 1 FROM phase_transitions WHERE from_phase_id=4 AND to_phase_id=5);
+
+-- Helper views for readability (drop/create idempotent)
+DROP VIEW IF EXISTS v_phase_names;
+CREATE VIEW v_phase_names AS
+SELECT id AS phase_id, name FROM phases;
+
+-- ----------------------------
+-- TASKS: validation & touch
+-- ----------------------------
+
+-- Validation BEFORE UPDATE: block no-ops, block illegal transitions, block leaving Closed
 DROP TRIGGER IF EXISTS trg_tasks_phase_validate;
 CREATE TRIGGER trg_tasks_phase_validate
 BEFORE UPDATE OF phase_id ON tasks
@@ -35,84 +63,85 @@ FOR EACH ROW
 BEGIN
   -- Block no-op
   SELECT
+    CASE WHEN NEW.phase_id = OLD.phase_id
+         THEN RAISE(ABORT, 'no_change') END;
+
+  -- Block updates when current is Closed
+  SELECT
     CASE
-      WHEN NEW.phase_id = OLD.phase_id THEN
-        RAISE(ABORT, 'no_change')
-      -- Block leaving a terminal phase
-      WHEN (SELECT is_terminal FROM phases WHERE id = OLD.phase_id) = 1 THEN
-        RAISE(ABORT, 'invalid_transition: terminal phase cannot change')
-      -- Allow only if a row exists in phase_transitions (from=old -> to=new)
-      WHEN EXISTS (
-        SELECT 1
-        FROM phase_transitions pt
-        WHERE pt.from_phase_id = OLD.phase_id
-          AND pt.to_phase_id   = NEW.phase_id
-      ) THEN
-        NULL
-      ELSE
-        RAISE(ABORT, 'invalid_transition')
+      WHEN (SELECT name FROM phases WHERE id = OLD.phase_id) = 'Closed'
+      THEN RAISE(ABORT, 'invalid_transition')
+    END;
+
+  -- Enforce allowed transitions
+  SELECT
+    CASE
+      WHEN NOT EXISTS (
+        SELECT 1 FROM phase_transitions
+        WHERE from_phase_id = OLD.phase_id AND to_phase_id = NEW.phase_id
+      )
+      THEN RAISE(ABORT, 'invalid_transition')
     END;
 END;
 
-----------------------------------------------------------------------
--- Subtasks: validate phase transitions before update
-----------------------------------------------------------------------
+-- Touch AFTER UPDATE: update updated_at_utc if present
+DROP TRIGGER IF EXISTS trg_tasks_touch_updated_at_on_phase;
+CREATE TRIGGER trg_tasks_touch_updated_at_on_phase
+AFTER UPDATE OF phase_id ON tasks
+FOR EACH ROW
+WHEN EXISTS (
+  SELECT 1 FROM pragma_table_info('tasks') WHERE name='updated_at_utc'
+)
+BEGIN
+  UPDATE tasks
+  SET updated_at_utc = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+  WHERE id = NEW.id;
+END;
+
+-- ----------------------------
+-- SUBTASKS: validation & touch
+-- ----------------------------
 
 DROP TRIGGER IF EXISTS trg_subtasks_phase_validate;
 CREATE TRIGGER trg_subtasks_phase_validate
 BEFORE UPDATE OF phase_id ON subtasks
 FOR EACH ROW
 BEGIN
+  -- Block no-op
+  SELECT
+    CASE WHEN NEW.phase_id = OLD.phase_id
+         THEN RAISE(ABORT, 'no_change') END;
+
+  -- Block updates when current is Closed
   SELECT
     CASE
-      WHEN NEW.phase_id = OLD.phase_id THEN
-        RAISE(ABORT, 'no_change')
-      WHEN (SELECT is_terminal FROM phases WHERE id = OLD.phase_id) = 1 THEN
-        RAISE(ABORT, 'invalid_transition: terminal phase cannot change')
-      WHEN EXISTS (
-        SELECT 1
-        FROM phase_transitions pt
-        WHERE pt.from_phase_id = OLD.phase_id
-          AND pt.to_phase_id   = NEW.phase_id
-      ) THEN
-        NULL
-      ELSE
-        RAISE(ABORT, 'invalid_transition')
+      WHEN (SELECT name FROM phases WHERE id = OLD.phase_id) = 'Closed'
+      THEN RAISE(ABORT, 'invalid_transition')
     END;
-END;
 
-----------------------------------------------------------------------
--- Touch updated_at_utc after a successful phase change
-----------------------------------------------------------------------
-
-DROP TRIGGER IF EXISTS trg_tasks_touch_updated_at_on_phase;
-CREATE TRIGGER trg_tasks_touch_updated_at_on_phase
-AFTER UPDATE OF phase_id ON tasks
-FOR EACH ROW
-BEGIN
-  UPDATE tasks
-     SET updated_at_utc = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-   WHERE id = NEW.id;
+  -- Enforce allowed transitions
+  SELECT
+    CASE
+      WHEN NOT EXISTS (
+        SELECT 1 FROM phase_transitions
+        WHERE from_phase_id = OLD.phase_id AND to_phase_id = NEW.phase_id
+      )
+      THEN RAISE(ABORT, 'invalid_transition')
+    END;
 END;
 
 DROP TRIGGER IF EXISTS trg_subtasks_touch_updated_at_on_phase;
 CREATE TRIGGER trg_subtasks_touch_updated_at_on_phase
 AFTER UPDATE OF phase_id ON subtasks
 FOR EACH ROW
+WHEN EXISTS (
+  SELECT 1 FROM pragma_table_info('subtasks') WHERE name='updated_at_utc'
+)
 BEGIN
   UPDATE subtasks
-     SET updated_at_utc = strftime('%Y-%m-%dT%H:%M:%fZ','now')
-   WHERE id = NEW.id;
+  SET updated_at_utc = strftime('%Y-%m-%dT%H:%M:%SZ','now')
+  WHERE id = NEW.id;
 END;
-
-----------------------------------------------------------------------
--- Helpful indexes (if not already present)
-----------------------------------------------------------------------
-
-CREATE INDEX IF NOT EXISTS idx_phase_transitions_from_to
-  ON phase_transitions(from_phase_id, to_phase_id);
-
--- (tasks/subtasks phase & updated indexes exist from earlier migrations)
 
 COMMIT;
 

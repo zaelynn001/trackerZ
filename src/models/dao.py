@@ -69,7 +69,7 @@ def change_project_phase(project_id: int, actor: str, new_phase_id: int, note: s
     with tx() as conn:
         if old_phase_id == new_phase_id:
             conn.execute("""
-                INSERT INTO project_updates (project_id, occurred_at_utc, actor, reason, old_phase_id, new_phase_id, note)
+                INSERT INTO project_updates (project_id, changed_at_utc, actor, reason, old_phase_id, new_phase_id, note)
                 VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?, 'Note', ?, ?, ?)
             """, (project_id, actor, old_phase_id, new_phase_id, note or "No phase change"))
             return old_phase_id, new_phase_id
@@ -83,7 +83,7 @@ def change_project_phase(project_id: int, actor: str, new_phase_id: int, note: s
              WHERE id = ?
         """, (new_phase_id, project_id))
         conn.execute("""
-            INSERT INTO project_updates (project_id, occurred_at_utc, actor, reason, old_phase_id, new_phase_id, note)
+            INSERT INTO project_updates (project_id, changed_at_utc, actor, reason, old_phase_id, new_phase_id, note)
             VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?, 'Phase Change', ?, ?, ?)
         """, (project_id, actor, old_phase_id, new_phase_id, note))
         logging.info("Project %s phase change: %s -> %s", project_id, old_phase_id, new_phase_id)
@@ -118,13 +118,13 @@ def list_subtasks_for_project(project_id: int) -> List[Dict]:
 def list_project_updates(project_id: int) -> List[Dict]:
     with tx() as conn:
         return conn.execute("""
-            SELECT u.id, u.occurred_at_utc, u.actor, u.reason,
+            SELECT u.id, u.changed_at_utc, u.actor, u.reason,
                    (SELECT name FROM phases WHERE id = u.old_phase_id) AS old_phase,
                    (SELECT name FROM phases WHERE id = u.new_phase_id) AS new_phase,
                    u.note
             FROM project_updates u
             WHERE u.project_id = ?
-            ORDER BY u.occurred_at_utc DESC, u.id DESC
+            ORDER BY u.changed_at_utc DESC, u.id DESC
         """, (project_id,)).fetchall()
 
 def list_attachments_for_project(project_id: int) -> List[Dict]:
@@ -144,7 +144,7 @@ def change_task_phase(task_id: int, actor: str, new_phase_id: int, note: str = "
     with tx() as conn:
         if old_phase_id == new_phase_id:
             conn.execute("""
-                INSERT INTO task_updates (task_id, occurred_at_utc, actor, reason, old_phase_id, new_phase_id, note)
+                INSERT INTO task_updates (task_id, changed_at_utc, actor, reason, old_phase_id, new_phase_id, note)
                 VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?, 'Note', ?, ?, ?)
             """, (task_id, actor, old_phase_id, new_phase_id, note or "No phase change"))
             return old_phase_id, new_phase_id
@@ -158,7 +158,7 @@ def change_task_phase(task_id: int, actor: str, new_phase_id: int, note: str = "
              WHERE id = ?
         """, (new_phase_id, task_id))
         conn.execute("""
-            INSERT INTO task_updates (task_id, occurred_at_utc, actor, reason, old_phase_id, new_phase_id, note)
+            INSERT INTO task_updates (task_id, changed_at_utc, actor, reason, old_phase_id, new_phase_id, note)
             VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?, 'Phase Change', ?, ?, ?)
         """, (task_id, actor, old_phase_id, new_phase_id, note))
         logging.info("Task %s phase change: %s -> %s", task_id, old_phase_id, new_phase_id)
@@ -175,7 +175,7 @@ def change_subtask_phase(subtask_id: int, actor: str, new_phase_id: int, note: s
     with tx() as conn:
         if old_phase_id == new_phase_id:
             conn.execute("""
-                INSERT INTO subtask_updates (subtask_id, occurred_at_utc, actor, reason, old_phase_id, new_phase_id, note)
+                INSERT INTO subtask_updates (subtask_id, changed_at_utc, actor, reason, old_phase_id, new_phase_id, note)
                 VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?, 'Note', ?, ?, ?)
             """, (subtask_id, actor, old_phase_id, new_phase_id, note or "No phase change"))
             return old_phase_id, new_phase_id
@@ -189,7 +189,7 @@ def change_subtask_phase(subtask_id: int, actor: str, new_phase_id: int, note: s
              WHERE id = ?
         """, (new_phase_id, subtask_id))
         conn.execute("""
-            INSERT INTO subtask_updates (subtask_id, occurred_at_utc, actor, reason, old_phase_id, new_phase_id, note)
+            INSERT INTO subtask_updates (subtask_id, changed_at_utc, actor, reason, old_phase_id, new_phase_id, note)
             VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?, 'Phase Change', ?, ?, ?)
         """, (subtask_id, actor, old_phase_id, new_phase_id, note))
         logging.info("Subtask %s phase change: %s -> %s", subtask_id, old_phase_id, new_phase_id)
@@ -220,24 +220,24 @@ def get_subtask(subtask_id: int) -> Optional[Dict]:
 def list_task_updates(task_id: int) -> List[Dict]:
     with tx() as conn:
         return conn.execute("""
-            SELECT u.id, u.occurred_at_utc, u.actor, u.reason,
+            SELECT u.id, u.changed_at_utc, u.reason,
                    (SELECT name FROM phases WHERE id = u.old_phase_id) AS old_phase,
                    (SELECT name FROM phases WHERE id = u.new_phase_id) AS new_phase,
                    u.note
             FROM task_updates u
             WHERE u.task_id = ?
-            ORDER BY u.occurred_at_utc DESC, u.id DESC
+            ORDER BY u.changed_at_utc DESC, u.id DESC
         """, (task_id,)).fetchall()
 
 def list_subtask_updates(subtask_id: int) -> List[Dict]:
     with tx() as conn:
         return conn.execute("""
-            SELECT u.id, u.occurred_at_utc, u.actor, u.reason,
+            SELECT u.id, u.changed_at_utc, u.reason,
                    (SELECT name FROM phases WHERE id = u.old_phase_id) AS old_phase,
                    (SELECT name FROM phases WHERE id = u.new_phase_id) AS new_phase,
                    u.note
             FROM subtask_updates u
             WHERE u.subtask_id = ?
-            ORDER BY u.occurred_at_utc DESC, u.id DESC
+            ORDER BY u.changed_at_utc DESC, u.id DESC
         """, (subtask_id,)).fetchall()
 
