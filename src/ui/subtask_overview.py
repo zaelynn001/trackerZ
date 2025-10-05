@@ -62,7 +62,7 @@ class SubtaskOverviewDialog(QDialog):
         form.addRow("Created / Updated (UTC)", self.details_times)
 
         # history
-        self.history_table = _Table(["When (UTC)", "Actor", "Reason", "Old Phase", "New Phase", "Note"], parent=self.tab_history)
+        self.history_table = _Table(["When (UTC)", "Reason", "Old Phase", "New Phase", "Note"], parent=self.tab_history)
         layh = QVBoxLayout(self.tab_history)
         layh.addWidget(self.history_table)
 
@@ -87,7 +87,7 @@ class SubtaskOverviewDialog(QDialog):
         self.details_times.setText(f"{s.get('created_at_utc','')} / {s.get('updated_at_utc','')}")
         # history
         hrows = list_subtask_updates(self.subtask_id)
-        self.history_table.load_rows(hrows, ["occurred_at_utc","actor","reason","old_phase","new_phase","note"])
+        self.history_table.load_rows(hrows, ["occurred_at_utc","reason","old_phase","new_phase","note"])
 
     def _open_editor(self):
         dlg = SubtaskEditorDialog(self.subtask_id, parent=self)

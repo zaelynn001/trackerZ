@@ -79,7 +79,7 @@ class SubtaskEditorDialog(QDialog):
         new_phase_id = self.phase_combo.currentData()
         try:
             if self._current_phase_id and new_phase_id and new_phase_id != self._current_phase_id:
-                change_subtask_phase(self.subtask_id, actor="local-user", new_phase_id=new_phase_id, note="")
+                change_subtask_phase(self.subtask_id, new_phase_id=new_phase_id, note="")
         except Exception as e:
             QMessageBox.critical(self, "Phase change blocked", str(e))
             return

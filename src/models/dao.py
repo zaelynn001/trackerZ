@@ -136,7 +136,7 @@ def list_expenses_for_project(project_id: int) -> List[Dict]:
 # ─────────────────────────────────────────────────────────────
 # Task services
 # ─────────────────────────────────────────────────────────────
-def change_task_phase(task_id: int, actor: str, new_phase_id: int, note: str = "") -> Tuple[int, int]:
+def change_task_phase(task_id: int, new_phase_id: int, note: str = "") -> Tuple[int, int]:
     old_phase_id = current_phase_id_for("tasks", "id", task_id)
     if old_phase_id is None:
         raise ValueError(f"Task {task_id} not found")
@@ -144,9 +144,9 @@ def change_task_phase(task_id: int, actor: str, new_phase_id: int, note: str = "
     with tx() as conn:
         if old_phase_id == new_phase_id:
             conn.execute("""
-                INSERT INTO task_updates (task_id, changed_at_utc, actor, reason, old_phase_id, new_phase_id, note)
-                VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?, 'Note', ?, ?, ?)
-            """, (task_id, actor, old_phase_id, new_phase_id, note or "No phase change"))
+                INSERT INTO task_updates (task_id, changed_at_utc, reason, old_phase_id, new_phase_id, note)
+                VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), 'Note', ?, ?, ?)
+            """, (task_id, old_phase_id, new_phase_id, note or "No phase change"))
             return old_phase_id, new_phase_id
 
         if not is_allowed_phase_change(old_phase_id, new_phase_id):
@@ -158,16 +158,16 @@ def change_task_phase(task_id: int, actor: str, new_phase_id: int, note: str = "
              WHERE id = ?
         """, (new_phase_id, task_id))
         conn.execute("""
-            INSERT INTO task_updates (task_id, changed_at_utc, actor, reason, old_phase_id, new_phase_id, note)
-            VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?, 'Phase Change', ?, ?, ?)
-        """, (task_id, actor, old_phase_id, new_phase_id, note))
+            INSERT INTO task_updates (task_id, changed_at_utc, reason, old_phase_id, new_phase_id, note)
+            VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), 'Phase Change', ?, ?, ?)
+        """, (task_id, old_phase_id, new_phase_id, note))
         logging.info("Task %s phase change: %s -> %s", task_id, old_phase_id, new_phase_id)
         return old_phase_id, new_phase_id
 
 # ─────────────────────────────────────────────────────────────
 # Subtask services
 # ─────────────────────────────────────────────────────────────
-def change_subtask_phase(subtask_id: int, actor: str, new_phase_id: int, note: str = "") -> Tuple[int, int]:
+def change_subtask_phase(subtask_id: int, new_phase_id: int, note: str = "") -> Tuple[int, int]:
     old_phase_id = current_phase_id_for("subtasks", "id", subtask_id)
     if old_phase_id is None:
         raise ValueError(f"Subtask {subtask_id} not found")
@@ -175,9 +175,9 @@ def change_subtask_phase(subtask_id: int, actor: str, new_phase_id: int, note: s
     with tx() as conn:
         if old_phase_id == new_phase_id:
             conn.execute("""
-                INSERT INTO subtask_updates (subtask_id, changed_at_utc, actor, reason, old_phase_id, new_phase_id, note)
-                VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?, 'Note', ?, ?, ?)
-            """, (subtask_id, actor, old_phase_id, new_phase_id, note or "No phase change"))
+                INSERT INTO subtask_updates (subtask_id, changed_at_utc, reason, old_phase_id, new_phase_id, note)
+                VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), 'Note', ?, ?, ?)
+            """, (subtask_id, old_phase_id, new_phase_id, note or "No phase change"))
             return old_phase_id, new_phase_id
 
         if not is_allowed_phase_change(old_phase_id, new_phase_id):
@@ -189,9 +189,9 @@ def change_subtask_phase(subtask_id: int, actor: str, new_phase_id: int, note: s
              WHERE id = ?
         """, (new_phase_id, subtask_id))
         conn.execute("""
-            INSERT INTO subtask_updates (subtask_id, changed_at_utc, actor, reason, old_phase_id, new_phase_id, note)
-            VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), ?, 'Phase Change', ?, ?, ?)
-        """, (subtask_id, actor, old_phase_id, new_phase_id, note))
+            INSERT INTO subtask_updates (subtask_id, changed_at_utc, reason, old_phase_id, new_phase_id, note)
+            VALUES (?, strftime('%Y-%m-%dT%H:%M:%SZ','now'), 'Phase Change', ?, ?, ?)
+        """, (subtask_id, old_phase_id, new_phase_id, note))
         logging.info("Subtask %s phase change: %s -> %s", subtask_id, old_phase_id, new_phase_id)
         return old_phase_id, new_phase_id
 
