@@ -1,10 +1,10 @@
 # trackerZ main window
-# Rev 0.0.2
+# Rev 0.1.0
 
 from __future__ import annotations
 from PySide6.QtWidgets import QMainWindow, QWidget, QLabel, QDockWidget
 from PySide6.QtCore import Qt
-from .diagnostics_panel import DiagnosticsPanel
+from src.ui.diagnostics_panel import DiagnosticsPanel
 
 class MainWindow(QMainWindow):
     """App shell with a detachable diagnostics dock."""

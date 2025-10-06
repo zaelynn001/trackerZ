@@ -1,5 +1,5 @@
 # trackerZ diagnostics panel
-# Rev 0.0.2
+# Rev 0.1.0
 
 from __future__ import annotations
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTextEdit, QPushButton

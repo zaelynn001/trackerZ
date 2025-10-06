@@ -1,11 +1,11 @@
 # trackerZ DB adapter
-# Rev 0.0.2
+# Rev 0.1.0
 
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
-from ..utils.logging_setup import get_logger
+from utils.logging_setup import get_logger
 
 @dataclass
 class DB:

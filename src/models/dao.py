@@ -1,34 +1,43 @@
 # trackerZ DAO
-# Rev 0.0.2
+# Rev 0.1.0
 
 from __future__ import annotations
 from dataclasses import dataclass
-from .db import DB
+from models.db import DB
 
 @dataclass
 class DAO:
-    """Direct SQL accessors used by services."""
     db: DB
 
-    # Phase transitions
     def allowed_transitions(self) -> set[tuple[int, int]]:
         rows = self.db.execute(
             "SELECT from_phase_id, to_phase_id FROM phase_transitions"
         ).fetchall()
         return {(int(r[0]), int(r[1])) for r in rows}
 
-    # Projects
     def list_projects(self):
         return self.db.execute(
             "SELECT id, name, created_at, updated_at FROM projects ORDER BY created_at DESC"
         ).fetchall()
 
-    # Tasks
+    # --- helpers ---
+    @staticmethod
+    def _row_to_dict(cur, row):
+        if row is None:
+            return None
+        # sqlite3.Row supports mapping access already
+        if hasattr(row, "keys"):
+            return row
+        cols = [d[0] for d in cur.description]
+        return dict(zip(cols, row))
+
+    # --- tasks ---
     def get_task(self, task_id: int):
-        return self.db.execute(
+        cur = self.db.execute(
             "SELECT id, project_id, phase_id FROM tasks WHERE id=?",
             (task_id,),
-        ).fetchone()
+        )
+        return self._row_to_dict(cur, cur.fetchone())
 
     def set_task_phase(self, task_id: int, phase_id: int) -> None:
         self.db.execute(
@@ -37,12 +46,13 @@ class DAO:
         )
         self.db.commit()
 
-    # Subtasks
+    # --- subtasks ---
     def get_subtask(self, subtask_id: int):
-        return self.db.execute(
+        cur = self.db.execute(
             "SELECT id, task_id, phase_id FROM subtasks WHERE id=?",
             (subtask_id,),
-        ).fetchone()
+        )
+        return self._row_to_dict(cur, cur.fetchone())
 
     def set_subtask_phase(self, subtask_id: int, phase_id: int) -> None:
         self.db.execute(

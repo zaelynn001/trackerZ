@@ -1,14 +1,14 @@
 # trackerZ application entry point
-# Rev 0.0.2
+# Rev 0.1.0
 
 from __future__ import annotations
 import sys
 from pathlib import Path
 from PySide6.QtWidgets import QApplication
-from .utils.logging_setup import setup_logging, get_logger
-from .ui.main_window import MainWindow
-from .app_context import AppContext
-from .utils.paths import data_dir
+from src.utils.logging_setup import setup_logging, get_logger
+from src.ui.main_window import MainWindow
+from src.app_context import AppContext
+from src.utils.paths import data_dir
 
 def main() -> int:
     """Initialize logging, context, and main window."""

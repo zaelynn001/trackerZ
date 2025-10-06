@@ -1,10 +1,10 @@
 # trackerZ phase service
-# Rev 0.0.2
+# Rev 0.1.0
 
 from __future__ import annotations
 from dataclasses import dataclass
-from ..models.types import EntityType
-from ..models.dao import DAO
+from src.models.types import EntityType
+from src.models.dao import DAO
 
 @dataclass
 class PhaseService:

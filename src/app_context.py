@@ -1,13 +1,13 @@
 # trackerZ application context
-# Rev 0.0.2
+# Rev 0.1.0
 
 from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
-from .utils.logging_setup import get_logger
-from .models.db import DB
-from .models.dao import DAO
-from .services.phase_service import PhaseService
+from src.utils.logging_setup import get_logger
+from src.models.db import DB
+from src.models.dao import DAO
+from src.services.phase_service import PhaseService
 
 @dataclass
 class AppContext:
