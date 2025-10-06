@@ -1,5 +1,5 @@
 # trackerZ phase rule unit tests
-# Rev 0.0.1
+# Rev 0.0.2
 
 import sqlite3
 import pytest
