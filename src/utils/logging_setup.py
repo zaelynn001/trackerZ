@@ -1,5 +1,5 @@
 # trackerZ logging setup
-# Rev 0.0.1
+# Rev 0.1.0
 
 from __future__ import annotations
 import logging

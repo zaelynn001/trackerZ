@@ -1,7 +1,9 @@
+# Rev 0.1.0
+
 from __future__ import annotations
 import sys, os
 from PySide6.QtWidgets import QApplication
-from src.ui.main_window import MainWindow
+from ui.main_window import MainWindow
 
 def main():
     db_path = os.environ.get("TRACKERZ_DB", "data/tracker.db")

@@ -1,5 +1,5 @@
 # trackerZ main window
-# Rev 0.0.1
+# Rev 0.1.0
 
 from __future__ import annotations
 from PySide6.QtWidgets import QMainWindow, QWidget, QLabel, QDockWidget

@@ -1,5 +1,5 @@
 # trackerZ type definitions
-# Rev 0.0.2
+# Rev 0.1.0
 
 from __future__ import annotations
 from typing import Literal
