@@ -1,0 +1,9 @@
+# trackerZ type definitions
+# Rev 0.0.2
+
+from __future__ import annotations
+from typing import Literal
+
+# Entity classification hierarchy: project → task → subtask
+EntityType = Literal["project", "task", "subtask"]
+

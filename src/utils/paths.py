@@ -1,32 +1,25 @@
-# src/utils/paths.py
+# Rev 0.0.1
+
+from __future__ import annotations
 import os
 from pathlib import Path
 
-APP_NAME = "trackerZ"
+APP_ID = "trackerZ"
 
-def _home() -> Path:
-    return Path.home()
-
-def xdg_data_home() -> Path:
-    return Path(os.environ.get("XDG_DATA_HOME", _home() / ".local" / "share"))
-
-def xdg_state_home() -> Path:
-    return Path(os.environ.get("XDG_STATE_HOME", _home() / ".local" / "state"))
-
-def xdg_config_home() -> Path:
-    return Path(os.environ.get("XDG_CONFIG_HOME", _home() / ".config"))
-
-def ensure_dir(p: Path) -> Path:
+def state_dir() -> Path:
+    """Return XDG-compliant state directory, e.g. ~/.local/state/trackerZ"""
+    base = Path(os.getenv("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+    p = base / APP_ID
     p.mkdir(parents=True, exist_ok=True)
     return p
 
-def logs_dir() -> Path:
-    return ensure_dir(xdg_state_home() / APP_NAME / "logs")
+def log_dir() -> Path:
+    """Return trackerZ log directory under state dir"""
+    p = state_dir() / "logs"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
-def config_dir() -> Path:
-    return ensure_dir(xdg_config_home() / APP_NAME)
-
-def db_path(project_root: Path) -> Path:
-    # dev DB path (later we can switch to XDG data if you want)
-    return project_root / "data" / "tracker.db"
+def data_dir() -> Path:
+    """Return current repo data directory (for db + migrations)"""
+    return Path.cwd() / "data"
 

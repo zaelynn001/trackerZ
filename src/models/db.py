@@ -1,41 +1,35 @@
-# src/models/db.py
-import os
+# trackerZ DB adapter
+# Rev 0.0.1
+
+from __future__ import annotations
+from dataclasses import dataclass
+from pathlib import Path
 import sqlite3
-from contextlib import contextmanager
+from ..utils.logging_setup import get_logger
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+@dataclass
+class DB:
+    """Lightweight SQLite wrapper with sane pragmas."""
+    path: Path
 
-def _default_db_path() -> str:
-    return os.path.join(PROJECT_ROOT, "data", "tracker.db")
+    def __post_init__(self):
+        self._log = get_logger("DB")
+        self.conn = sqlite3.connect(self.path, detect_types=sqlite3.PARSE_DECLTYPES)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL;")
+        self.conn.execute("PRAGMA foreign_keys=ON;")
+        self._log.info("SQLite open %s", self.path)
 
-# Allow tests or tools to point to a different DB file:
-DB_PATH = os.environ.get("TRACKERZ_DB", _default_db_path())
+    # Thin delegation helpers
+    def cursor(self):
+        return self.conn.cursor()
 
-def set_db_path(path: str):
-    global DB_PATH
-    DB_PATH = path
+    def execute(self, *a, **k):
+        return self.conn.execute(*a, **k)
 
-def _dict_factory(cursor, row):
-    return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+    def executemany(self, *a, **k):
+        return self.conn.executemany(*a, **k)
 
-def get_connection():
-    # Ensure DB exists
-    if not os.path.exists(DB_PATH):
-        raise FileNotFoundError(f"Database not found at {DB_PATH}. Did you run schema.sql and seed.sql?")
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = _dict_factory
-    conn.execute("PRAGMA foreign_keys = ON;")
-    return conn
-
-@contextmanager
-def tx():
-    conn = get_connection()
-    try:
-        yield conn
-        conn.commit()
-    except Exception:
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+    def commit(self):
+        return self.conn.commit()
 

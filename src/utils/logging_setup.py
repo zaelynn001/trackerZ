@@ -1,37 +1,42 @@
-# src/utils/logging_setup.py
+# trackerZ logging setup
+# Rev 0.0.1
+
+from __future__ import annotations
 import logging
-import logging.handlers
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from .paths import logs_dir
+from .paths import log_dir
 
-def init_logging(app_name: str = "trackerZ") -> Path:
-    logs_path = logs_dir()
-    log_file = logs_path / f"{app_name}.log"
+_LOGGER_NAME = "trackerZ"
+_DEF_FMT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 
-    root = logging.getLogger()
-    if root.handlers:
-        return log_file  # already initialized
+def setup_logging(level: int = logging.INFO) -> logging.Logger:
+    """Initialize rotating file + console logger."""
+    logger = logging.getLogger(_LOGGER_NAME)
+    if getattr(logger, "_configured", False):
+        return logger
 
-    root.setLevel(logging.INFO)
+    logger.setLevel(level)
+    log_path: Path = log_dir() / "trackerZ.log"
 
-    # Console handler (INFO+)
+    fh = RotatingFileHandler(log_path, maxBytes=2_000_000, backupCount=3)
+    fh.setFormatter(logging.Formatter(_DEF_FMT))
+    fh.setLevel(level)
+
     ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-    ch.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+    ch.setFormatter(logging.Formatter(_DEF_FMT))
+    ch.setLevel(level)
 
-    # Rotating file handler (keep a few small logs)
-    fh = logging.handlers.RotatingFileHandler(
-        log_file, maxBytes=512_000, backupCount=5, encoding="utf-8"
-    )
-    fh.setLevel(logging.DEBUG)
-    fh.setFormatter(logging.Formatter(
-        "%(asctime)s %(levelname)s [%(process)d:%(threadName)s] %(name)s - %(message)s",
-        datefmt="%Y-%m-%dT%H:%M:%S%z"
-    ))
+    logger.addHandler(fh)
+    logger.addHandler(ch)
 
-    root.addHandler(ch)
-    root.addHandler(fh)
+    logger._configured = True  # type: ignore[attr-defined]
+    logger.info("Logging initialized at %s", log_path)
+    return logger
 
-    logging.getLogger(__name__).info("Logging initialized at %s", log_file)
-    return log_file
+
+def get_logger(name: str | None = None) -> logging.Logger:
+    """Return namespaced child logger."""
+    base = logging.getLogger(_LOGGER_NAME)
+    return base if name is None else base.getChild(name)
 
