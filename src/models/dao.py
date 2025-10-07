@@ -1,5 +1,5 @@
 # trackerZ DAO
-# Rev 0.1.0
+# Rev 0.1.1
 
 from __future__ import annotations
 from dataclasses import dataclass
