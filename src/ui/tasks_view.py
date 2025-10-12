@@ -1,93 +1,95 @@
-# src/ui/tasks_view.py  Rev 0.1.1
-from __future__ import annotations
-from PySide6.QtCore import Qt, Signal, Slot, QModelIndex
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QTableView
-from PySide6.QtGui import QStandardItemModel, QStandardItem
+# Rev 0.4.1
 
-PHASE_LABEL = "Phase"
+# trackerZ – TasksView (Rev 0.4.1)
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView
+
+from viewmodels.tasks_viewmodel import TasksViewModel
 
 class TasksView(QWidget):
-    backRequested = Signal()
-    taskEditRequested = Signal(int)  # emits selected task_id
+    # Emitted when a user activates (double-clicks) a task row
+    taskChosen = Signal(int)
 
-    def __init__(self, tasks_vm, parent=None):
+    def __init__(self, tasks_repo, parent=None):
         super().__init__(parent)
-        self._vm = tasks_vm
+        self._vm = TasksViewModel(tasks_repo)
         self._project_id = None
+        self._phase_id = None
 
-        header = QHBoxLayout()
-        self._back = QPushButton("Back")
-        self._back.clicked.connect(self.backRequested.emit)
-        self._phase_label = QLabel(PHASE_LABEL + ":")
-        self._phase_combo = QComboBox()
-        self._phase_combo.currentIndexChanged.connect(self._apply_filter)
-        header.addWidget(self._back); header.addStretch(); header.addWidget(self._phase_label); header.addWidget(self._phase_combo)
+        self._table = QTableWidget(0, 3)  # id, name, phase
+        self._table.setHorizontalHeaderLabels(["ID", "Name", "Phase"])
+        self._table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self._table.setSelectionBehavior(QTableWidget.SelectRows)
+        self._table.setSelectionMode(QTableWidget.SingleSelection)
+        self._table.itemDoubleClicked.connect(self._on_item_double_clicked)
+        
+        hdr = self._table.horizontalHeader()
+        hdr.setStretchLastSection(True)                       # let last column fill
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # ID snug
+        hdr.setSectionResizeMode(1, QHeaderView.Stretch)           # Name grows
+        hdr.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Phase snug
 
-        ##counters = QHBoxLayout()
-        ##self._total = QLabel("Total: 0")
-        ##self._filtered = QLabel("Filtered: 0")
-        ##counters.addWidget(self._total); counters.addWidget(self._filtered); counters.addStretch()
+        vh = self._table.verticalHeader()
+        vh.setVisible(False)
+        vh.setDefaultSectionSize(22)       # tidy row height
+        vh.setMinimumSectionSize(18)
+        self._table.setWordWrap(False)
+        self._table.setAlternatingRowColors(True)
+        self._table.setSizeAdjustPolicy(
+            QTableWidget.AdjustToContentsOnFirstShow
+        )
 
-        self._tasks_table = QTableView()
-        self._tasks_table.setSelectionBehavior(QTableView.SelectRows)
-        self._tasks_table.setSelectionMode(QTableView.SingleSelection)
+        lay = QVBoxLayout(self)
+        lay.addWidget(self._table)
 
-        self._model = QStandardItemModel(0, 4, self)
-        self._model.setHorizontalHeaderLabels(["ID", "Title", "Phase", "Updated"])
-        self._tasks_table.setModel(self._model)
-
-        self._tasks_table.doubleClicked.connect(self._on_row_activated)
-        self._tasks_table.activated.connect(self._on_row_activated)
-
-        layout = QVBoxLayout(self)
-        layout.addLayout(header)
-        ##layout.addLayout(counters)
-        layout.addWidget(self._tasks_table)
-
-    def load_for_project(self, project_id: int):
+    def load_for_project(self, project_id: int, phase_id: int | None):
+        """Public entry point used by TasksTab."""
         self._project_id = project_id
-        phases = self._vm.list_phases()
-        self._phase_combo.blockSignals(True)
-        self._phase_combo.clear()
-        self._phase_combo.addItem("All", userData=None)
-        for pid, name in phases:
-            self._phase_combo.addItem(name, userData=pid)
-        self._phase_combo.blockSignals(False)
+        self._phase_id = phase_id
         self._reload()
 
-    def _apply_filter(self):
-        self._reload()
+    # --- internals ---------------------------------------------------------
 
     def _reload(self):
         if self._project_id is None:
             return
-        phase_id = self._phase_combo.currentData()
-        rows = self._vm.list_tasks(self._project_id, phase_id)
-        self._model.removeRows(0, self._model.rowCount())
-        for tid, title, phase_name, updated_at in rows:
-            items = [QStandardItem(str(tid)),
-                     QStandardItem(title or ""),
-                     QStandardItem(phase_name or ""),
-                     QStandardItem(updated_at or "")]
-            for it in items:
-                it.setEditable(False)
-            self._model.appendRow(items)
-        self._tasks_table.resizeColumnsToContents()
-        
+        total, rows = self._vm.list_tasks(project_id=self._project_id, phase_id=self._phase_id)
+        # You can propagate 'total vs filtered' to a status bar if you want:
+        # self.window().statusBar().showMessage(f"Showing {len(rows)} of {total} tasks")
 
-    @Slot(QModelIndex)
-    def _on_row_activated(self, index: QModelIndex):
-        if not index.isValid():
+        self._render(rows)
+
+    def _render(self, rows: list[dict]):
+        self._table.setRowCount(len(rows))
+        for r, row in enumerate(rows):
+            tid = row.get("id") or row.get("task_id")
+            name = row.get("name") or row.get("title") or ""
+            phase_name = row.get("phase_name") or row.get("phase") or ""
+
+            id_item = QTableWidgetItem(str(tid) if tid is not None else "")
+            name_item = QTableWidgetItem(name)
+            phase_item = QTableWidgetItem(phase_name)
+
+            # Store the task id in UserRole for reliable retrieval
+            id_item.setData(Qt.UserRole, tid)
+            name_item.setData(Qt.UserRole, tid)
+            phase_item.setData(Qt.UserRole, tid)
+
+            self._table.setItem(r, 0, id_item)
+            self._table.setItem(r, 1, name_item)
+            self._table.setItem(r, 2, phase_item)
+
+        self._table.resizeColumnsToContents()
+
+    def _on_item_double_clicked(self, item: QTableWidgetItem):
+        if not item:
             return
-        row = index.row()
-        tid = self._get_task_id_for_row(row)
-        if tid is not None:
-            self.taskEditRequested.emit(int(tid))
-
-    def _get_task_id_for_row(self, row: int) -> int | None:
-        try:
-            idx = self._model.index(row, 0)  # ID column
-            return int(self._model.data(idx))
-        except Exception:
-            return None
+        tid = item.data(Qt.UserRole)
+        if tid is None:
+            # Fallback: try to parse from column 0 text
+            try:
+                tid = int(self._table.item(item.row(), 0).text())
+            except Exception:
+                return
+        self.taskChosen.emit(int(tid))
 

@@ -1,11 +1,9 @@
-# src/app_launcher.py
-# Rev 0.1.1
+# Rev 0.4.1
+
+"""Thin launcher for `python -m src.app_launcher` (Rev 0.4.1)"""
 from __future__ import annotations
+from .main import main
 
-from main import main as run_app
-
-def main() -> int:
-    return run_app()
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+raise SystemExit(main())

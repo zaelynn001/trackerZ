@@ -1,39 +1,31 @@
-# trackerZ phase service
-# Rev 0.1.1
+# Rev 0.4.1
 
+"""Phase rules service (Rev 0.4.1)
+Provide allow/deny checks for phase changes.
+"""
 from __future__ import annotations
-from dataclasses import dataclass
-from ..models.types import EntityType
-from ..models.dao import DAO
+import sqlite3
+from typing import Iterable, Set
 
-@dataclass
+
+
+
 class PhaseService:
-    """Implements allowed phase validation and updates for tasks/subtasks."""
-    dao: DAO
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
 
-    def validate(self, from_phase_id: int, to_phase_id: int) -> bool:
-        """Return True if phase change is valid."""
-        return (from_phase_id, to_phase_id) in self.dao.allowed_transitions()
 
-    def change_phase(self, entity: EntityType, entity_id: int, to_phase_id: int) -> None:
-        """Perform validated phase change for entity."""
-        if entity == "task":
-            rec = self.dao.get_task(entity_id)
-            if not rec:
-                raise ValueError("task not found")
-            if not self.validate(int(rec["phase_id"]), to_phase_id):
-                raise PermissionError("invalid phase change")
-            self.dao.set_task_phase(entity_id, to_phase_id)
-            return
+    def is_allowed(self, from_id: int, to_id: int) -> bool:
+        row = self._conn.execute(
+            "SELECT 1 FROM phase_transitions WHERE from_phase_id=? AND to_phase_id=?",
+            (from_id, to_id),
+        ).fetchone()
+        return row is not None
 
-        if entity == "subtask":
-            rec = self.dao.get_subtask(entity_id)
-            if not rec:
-                raise ValueError("subtask not found")
-            if not self.validate(int(rec["phase_id"]), to_phase_id):
-                raise PermissionError("invalid phase change")
-            self.dao.set_subtask_phase(entity_id, to_phase_id)
-            return
 
-        raise ValueError("unsupported entity type")
-
+    def allowed_transitions(self, from_id: int) -> Set[int]:
+        rows = self._conn.execute(
+            "SELECT to_phase_id FROM phase_transitions WHERE from_phase_id=? ORDER BY to_phase_id",
+            (from_id,),
+        ).fetchall()
+        return {r[0] for r in rows}
