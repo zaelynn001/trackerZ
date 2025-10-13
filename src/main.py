@@ -1,6 +1,6 @@
-# Rev 0.4.1
+# Rev 0.5.1
 
-# src/main.py  (Rev 0.4.1)
+# src/main.py  (Rev 0.5.1)
 import sys
 from PySide6.QtGui import QGuiApplication, QFont
 from PySide6.QtCore import Qt, QCoreApplication
@@ -13,6 +13,7 @@ from repositories.sqlite_phase_repository import SQLitePhaseRepository
 from ui.main_window import MainWindow
 
 from src.utils.logging_setup import setup_logging
+from src.utils.paths import DB_PATH
 
 def _build_repositories(db_path: str):
     db = Database(db_path)
@@ -36,7 +37,7 @@ def main():
     logfile = setup_logging("trackerZ")
     print(f"[logging] Writing to: {logfile}")  # also lands in run.sh tee
     # --- DI wiring ---
-    projects_repo, tasks_repo, subtasks_repo, phases_repo = _build_repositories("data/tracker.db")
+    projects_repo, tasks_repo, subtasks_repo, phases_repo = _build_repositories(DB_PATH)
 
     # --- UI ---
     win = MainWindow(

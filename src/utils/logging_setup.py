@@ -1,6 +1,6 @@
-# Rev 0.4.1
+# Rev 0.5.1
 
-# trackerZ – logging setup (Rev 0.4.1)
+# trackerZ – logging setup (Rev 0.5.1)
 from __future__ import annotations
 import logging, os, sys
 from logging.handlers import RotatingFileHandler
@@ -20,6 +20,12 @@ try:
         logging.getLogger("qt").log(lvl, message)
 except Exception:
     qInstallMessageHandler = None  # PySide6 not available at import time
+    
+APP_NAME = "trackerZ"
+STATE_DIR = Path(os.environ.get("XDG_STATE_HOME", "~/.local/state")).expanduser() / APP_NAME / "logs"
+STATE_DIR.mkdir(parents=True, exist_ok=True)
+
+LOG_FILE = STATE_DIR / "trackerZ.log"  # <-- exported symbol diagnostics_panel expects
 
 def _state_dir(app: str = "trackerZ") -> Path:
     base = os.environ.get("XDG_STATE_HOME", os.path.expanduser("~/.local/state"))

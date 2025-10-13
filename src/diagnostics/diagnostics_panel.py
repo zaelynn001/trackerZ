@@ -1,10 +1,10 @@
-# Rev 0.4.1
+# Rev 0.5.1
 
-"""Diagnostics panel dock (Rev 0.4.1)"""
+"""Diagnostics panel dock (Rev 0.5.1)"""
 from __future__ import annotations
 from PySide6.QtWidgets import QDockWidget, QWidget, QVBoxLayout, QPushButton, QTextEdit
 from PySide6.QtCore import Qt
-from ..utils.logging_setup import LOG_FILE
+from utils.logging_setup import LOG_FILE
 
 
 

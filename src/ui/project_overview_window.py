@@ -1,5 +1,5 @@
-# Rev 0.4.1
-# trackerZ – ProjectOverviewWindow (Rev 0.4.1)
+# Rev 0.5.1
+# trackerZ – ProjectOverviewWindow (Rev 0.5.1)
 from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTabWidget, QLabel, QHBoxLayout
 from viewmodels.project_overview_viewmodel import ProjectOverviewViewModel

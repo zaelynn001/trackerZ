@@ -1,5 +1,5 @@
-# Rev 0.4.1
-# trackerZ – ProjectOverviewViewModel (Rev 0.4.1)
+# Rev 0.5.1
+# trackerZ – ProjectOverviewViewModel (Rev 0.5.1)
 class ProjectOverviewViewModel:
     def __init__(self, projects_repo, tasks_repo, subtasks_repo, attachments_repo=None, expenses_repo=None):
         self._projects = projects_repo

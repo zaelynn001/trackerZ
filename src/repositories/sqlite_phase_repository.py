@@ -1,6 +1,6 @@
-# Rev 0.4.1
+# Rev 0.5.1
 
-# trackerZ – SQLitePhaseRepository (Rev 0.4.1)
+# trackerZ – SQLitePhaseRepository (Rev 0.5.1)
 # Minimal repo used by M4 (phase dropdowns, etc.)
 
 from __future__ import annotations

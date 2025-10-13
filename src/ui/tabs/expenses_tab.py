@@ -1,5 +1,5 @@
-# Rev 0.4.1
-# trackerZ – ExpensesTab (Rev 0.4.1)
+# Rev 0.5.1
+# trackerZ – ExpensesTab (Rev 0.5.1)
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 class ExpensesTab(QWidget):
     def __init__(self, parent=None):

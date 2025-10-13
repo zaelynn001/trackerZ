@@ -1,6 +1,6 @@
-# Rev 0.4.1
+# Rev 0.5.1
 
-# trackerZ – SQLiteProjectRepository (Rev 0.4.1)
+# trackerZ – SQLiteProjectRepository (Rev 0.5.1)
 from __future__ import annotations
 import sqlite3
 from typing import List, Dict, Any, Optional

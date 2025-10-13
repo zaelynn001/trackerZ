@@ -1,5 +1,5 @@
-# Rev 0.4.1
-# trackerZ – SubtasksTab (Rev 0.4.1)
+# Rev 0.5.1
+# trackerZ – SubtasksTab (Rev 0.5.1)
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QTableWidget, QTableWidgetItem
 
 class SubtasksTab(QWidget):

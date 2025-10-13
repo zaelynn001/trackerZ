@@ -1,5 +1,5 @@
-# Rev 0.4.1
-# trackerZ – OverviewTab (Rev 0.4.1)
+# Rev 0.5.1
+# trackerZ – OverviewTab (Rev 0.5.1)
 from PySide6.QtWidgets import QWidget, QLabel, QGridLayout
 
 class OverviewTab(QWidget):
