@@ -1,91 +1,178 @@
-# Rev 0.5.1
+# Rev 0.6.5 — Fix repo attr + wire phase/priority ops
 from __future__ import annotations
 
 from typing import Optional
-from PySide6.QtCore import QObject, Signal, Slot, QRunnable, QThreadPool
 
+from PySide6.QtCore import QObject, Signal
 
-class _ReloadTasksJob(QRunnable):
-    def __init__(self, repo, project_id: int, phase_id: Optional[int], callback):
-        super().__init__()
-        self._repo = repo
-        self._project_id = project_id
-        self._phase_id = phase_id
-        self._callback = callback
-
-    def run(self):
-        total = self._repo.count_tasks_total(project_id=self._project_id)
-        rows = self._repo.list_tasks_filtered(project_id=self._project_id, phase_id=self._phase_id)
-        self._callback(total, rows)
+from repositories.sqlite_task_updates_repository import SQLiteTaskUpdatesRepository
 
 
 class TasksViewModel(QObject):
-    # Signals for UI
-    tasksReloaded = Signal(int, list)     # total, rows
-    taskCreated = Signal(int)             # task_id
-    taskUpdated = Signal(int)
-    taskDeleted = Signal(int)
-    taskPhaseChanged = Signal(int, int, int)  # task_id, old_phase_id, new_phase_id
-    noteAdded = Signal(int, int)          # task_id, note_id
-    timelineLoaded = Signal(int, list)    # task_id, updates
+    """
+    ViewModel that fronts Task CRUD and exposes a simple timeline loader.
 
-    def __init__(self, repo, thread_pool: Optional[QThreadPool] = None, parent: Optional[QObject] = None):
-        super().__init__(parent)
-        self._repo = repo
+    Emits:
+      - tasksReloaded(total: int, rows: list[dict])
+      - timelineLoaded(task_id: int, updates: list[dict])
+    """
+
+    tasksReloaded = Signal(int, list)
+    timelineLoaded = Signal(int, list)
+
+    def __init__(self, tasks_repo):
+        super().__init__()
+        self._tasks = tasks_repo  # <-- correct attribute
         self._project_id: Optional[int] = None
         self._phase_id: Optional[int] = None
-        self._pool = thread_pool or QThreadPool.globalInstance()
+        self._search: Optional[str] = None
+        self._updates_repo: Optional[SQLiteTaskUpdatesRepository] = None
 
-    # ------------ Listing ------------
-    def set_filters(self, project_id: int, phase_id: Optional[int] = None):
+    # -------------------------
+    # Filters / state
+    # -------------------------
+    def set_filters(
+        self,
+        project_id: int,
+        phase_id: Optional[int] = None,
+        search: Optional[str] = None,
+    ) -> None:
         self._project_id = project_id
         self._phase_id = phase_id
+        self._search = search
 
-    @Slot()
-    def reload(self):
+    # -------------------------
+    # Queries
+    # -------------------------
+    def reload(self) -> None:
         if self._project_id is None:
             self.tasksReloaded.emit(0, [])
             return
-        job = _ReloadTasksJob(self._repo, self._project_id, self._phase_id, self.tasksReloaded.emit)
-        self._pool.start(job)
 
-    # ------------ CRUD ------------
-    @Slot(int, str, str, int)
-    def create_task(self, project_id: int, name: str, description: str, phase_id: int = 1):
-        task_id = self._repo.create_task(project_id, name, description, phase_id)
-        self.taskCreated.emit(task_id)
-        self.reload()
+        total = self._tasks.count_tasks_total(
+            project_id=self._project_id,
+            phase_id=self._phase_id,
+            search=self._search,
+        )
+        rows = self._tasks.list_tasks_filtered(
+            project_id=self._project_id,
+            phase_id=self._phase_id,
+            search=self._search,
+            limit=500,
+            offset=0,
+        )
+        self.tasksReloaded.emit(total, rows)
 
-    @Slot(int, str, str)
-    def edit_task(self, task_id: int, name: str, description: str):
-        self._repo.update_task(task_id, name=name, description=description)
-        self.taskUpdated.emit(task_id)
-        self.reload()
+    # -------------------------
+    # Commands (CRUD)
+    # -------------------------
+    def create_task(
+        self,
+        *,
+        project_id: int,
+        name: str,
+        description: str | None,
+        phase_id: int = 1,
+        note_on_create: str | None = None,
+        priority_id: int | None = None,
+    ) -> int | None:
+        """
+        Create a task and reload the list. priority_id is optional; defaults to 2 (Medium).
+        """
+        try:
+            tid = self._tasks.create_task(
+                project_id=project_id,
+                name=name,
+                description=description or "",
+                phase_id=phase_id,
+                priority_id=(priority_id if priority_id is not None else 2),
+                note_on_create=note_on_create,
+            )
+            self.reload()
+            return tid
+        except Exception:
+            self.reload()
+            return None
 
-    @Slot(int)
-    def delete_task(self, task_id: int):
-        self._repo.delete_task(task_id)
-        self.taskDeleted.emit(task_id)
-        self.reload()
+    def update_task_fields(
+        self,
+        *,
+        task_id: int,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        note: Optional[str] = None,
+    ) -> bool:
+        ok = self._tasks.update_task_fields(
+            task_id,
+            name=name,
+            description=description,
+            note=note,
+        )
+        if ok:
+            self.reload()
+        return ok
 
-    # ------------ Phase change ------------
-    @Slot(int, int, str)
-    def change_phase(self, task_id: int, new_phase_id: int, note: str = ""):
-        # Fetch current phase to emit both old and new
-        row = self._repo._conn.execute("SELECT phase_id FROM tasks WHERE id = ?", (task_id,)).fetchone()
-        old_phase_id = row[0] if row else -1
-        self._repo.change_task_phase(task_id, new_phase_id, note)
-        self.taskPhaseChanged.emit(task_id, old_phase_id, new_phase_id)
-        self.reload()
+    def delete_task(self, task_id: int) -> bool:
+        ok = self._tasks.delete_task(task_id)
+        if ok:
+            self.reload()
+        return ok
 
-    # ------------ Timeline ------------
-    @Slot(int)
-    def load_timeline(self, task_id: int):
-        updates = self._repo.list_task_updates(task_id)
+    # -------------------------
+    # Phase / Priority ops
+    # -------------------------
+    def change_task_phase(
+        self,
+        *,
+        task_id: int,
+        new_phase_id: int,
+        reason: Optional[str] = None,
+        note: Optional[str] = None,
+    ) -> bool:
+        try:
+            ok = self._tasks.change_task_phase(task_id, new_phase_id, reason=reason or "phase_change", note=note)
+            if ok:
+                self.reload()
+            return ok
+        except Exception:
+            self.reload()
+            return False
+
+    def set_task_priority(self, *, task_id: int, new_priority_id: int, note: str | None = None) -> bool:
+        try:
+            ok = self._tasks.set_task_priority(task_id, new_priority_id, note=note)
+            if ok:
+                self.reload()
+            return bool(ok)
+        except Exception:
+            self.reload()
+            return False
+
+    # -------------------------
+    # Timeline
+    # -------------------------
+    def load_timeline(self, task_id: int, *, newest_first: bool = True) -> None:
+        repo = self._get_updates_repo()
+        updates = repo.list_updates_for_task(task_id, order_desc=newest_first)
         self.timelineLoaded.emit(task_id, updates)
 
-    @Slot(int, str)
-    def add_note(self, task_id: int, note: str):
-        note_id = self._repo.add_task_note(task_id, note)
-        self.noteAdded.emit(task_id, note_id)
-        self.load_timeline(task_id)
+    # -------------------------
+    # Internals
+    # -------------------------
+    def _get_updates_repo(self) -> SQLiteTaskUpdatesRepository:
+        if self._updates_repo is not None:
+            return self._updates_repo
+
+        # Reuse the same DB handle the tasks repo was built with.
+        db_handle = getattr(self._tasks, "_db_or_conn", None)
+        if db_handle is None:
+            possible = getattr(self._tasks, "_conn", None)
+            db_handle = possible if possible is not None else db_handle
+
+        if db_handle is None:
+            raise RuntimeError(
+                "TasksViewModel: unable to locate DB handle from tasks repo for timeline access."
+            )
+
+        self._updates_repo = SQLiteTaskUpdatesRepository(db_handle)
+        return self._updates_repo

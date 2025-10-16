@@ -1,6 +1,6 @@
-# Rev 0.5.1
+# Rev 0.6.5
 
-"""Paths and XDG helpers (Rev 0.5.1)
+"""Paths and XDG helpers (Rev 0.6.5)
 - Uses XDG Base Directory spec
 - Logs/state/config remain under XDG dirs
 - **DB now lives in project repo at** ./data/trackerZ.db (as requested)

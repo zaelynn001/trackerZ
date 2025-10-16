@@ -1,6 +1,6 @@
-# Rev 0.5.1
+# Rev 0.6.5
 
-# src/main.py  (Rev 0.5.1)
+# src/main.py  (Rev 0.6.5)
 import sys
 from PySide6.QtGui import QGuiApplication, QFont
 from PySide6.QtCore import Qt, QCoreApplication

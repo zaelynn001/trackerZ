@@ -1,4 +1,4 @@
-# Rev 0.6.5 — Task Editor with Phase, Priority, Note
+# Rev 0.6.5 — Subtask Editor with Phase, Priority, Note
 from __future__ import annotations
 from typing import Optional, Tuple
 from PySide6.QtWidgets import (
@@ -11,14 +11,14 @@ _PHASE_NAMES = {1: "Open", 2: "In Progress", 3: "In Hiatus", 4: "Resolved", 5: "
 _PRIORITY_NAMES = {1: "Low", 2: "Medium", 3: "High", 4: "Critical"}
 
 
-class TaskEditorDialog(QDialog):
+class SubtaskEditorDialog(QDialog):
     """
     Values returned (see values()):
       name: str
       description: str
-      phase_id: int        # selected phase
-      priority_id: int     # selected priority
-      note: str            # optional ('' if empty)
+      phase_id: int
+      priority_id: int
+      note: str
     """
 
     def __init__(
@@ -29,12 +29,11 @@ class TaskEditorDialog(QDialog):
         description: Optional[str] = None,
         phase_id: int = 1,
         priority_id: int = 2,
-        title: str = "Task"
+        title: str = "Subtask"
     ):
         super().__init__(parent)
         self.setWindowTitle(title)
 
-        # fields
         self._name = QLineEdit(name or "")
         self._desc = QTextEdit()
         if description:
@@ -55,7 +54,7 @@ class TaskEditorDialog(QDialog):
             self._cmb_priority.setCurrentIndex(j)
 
         self._note = QTextEdit()
-        self._note.setPlaceholderText("Optional note (will be recorded in the task timeline)")
+        self._note.setPlaceholderText("Optional note (will be recorded in the subtask timeline)")
 
         form = QFormLayout()
         form.addRow("Name:", self._name)

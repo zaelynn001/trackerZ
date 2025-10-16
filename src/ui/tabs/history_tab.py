@@ -1,5 +1,5 @@
-# Rev 0.5.1
-# trackerZ – HistoryTab (Rev 0.5.1)
+# Rev 0.6.5
+# trackerZ – HistoryTab (Rev 0.6.5)
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 class HistoryTab(QWidget):
     def __init__(self, parent=None):

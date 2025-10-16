@@ -1,6 +1,6 @@
-# Rev 0.5.1
+# Rev 0.6.5
 
-"""SQLite connection & migration runner (Rev 0.5.1)
+"""SQLite connection & migration runner (Rev 0.6.5)
 - WAL mode, foreign_keys=ON
 - Applies SQL files in data/migrations in lexical order
 - Tracks applied files in schema_migrations(filename TEXT PRIMARY KEY, applied_at UTC)
