@@ -1,4 +1,4 @@
-# Rev 0.6.5 — add Priority column (schema Rev 1.1.0)
+# Rev 0.6.7 — add Priority column (schema Rev 1.1.0)
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal

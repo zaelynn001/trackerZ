@@ -1,4 +1,4 @@
-# Rev 0.6.5 — Project Update Editor
+# Rev 0.6.7 — Project Update Editor
 from __future__ import annotations
 from typing import Optional, Dict
 

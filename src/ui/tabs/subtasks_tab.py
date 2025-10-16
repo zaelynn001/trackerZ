@@ -1,4 +1,4 @@
-# Rev 0.6.5 — CRUD + phase/priority labels + task filter shows all tasks by name
+# Rev 0.6.7 — CRUD + phase/priority labels + task filter shows all tasks by name
 from __future__ import annotations
 from typing import List, Optional
 

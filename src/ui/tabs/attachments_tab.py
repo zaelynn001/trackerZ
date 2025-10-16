@@ -1,5 +1,5 @@
-# Rev 0.6.5
-# trackerZ – AttachmentsTab (Rev 0.6.5)
+# Rev 0.6.7
+# trackerZ – AttachmentsTab (Rev 0.6.7)
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 class AttachmentsTab(QWidget):
     def __init__(self, parent=None):

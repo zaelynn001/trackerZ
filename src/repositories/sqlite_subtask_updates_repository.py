@@ -1,4 +1,4 @@
-# Rev 0.6.5
+# Rev 0.6.7
 from __future__ import annotations
 
 import sqlite3
@@ -9,7 +9,7 @@ class SQLiteSubtaskUpdatesRepository:
     """
     Read/append timeline entries for subtask_updates.
 
-    Schema expectation (Rev 0.6.5):
+    Schema expectation (Rev 0.6.7):
 
       subtask_updates(
         id INTEGER PRIMARY KEY,

@@ -1,4 +1,4 @@
-# Rev 0.6.5 — Fix repo attr + wire phase/priority ops
+# Rev 0.6.7 — Fix repo attr + wire phase/priority ops
 from __future__ import annotations
 
 from typing import Optional

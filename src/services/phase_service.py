@@ -1,6 +1,6 @@
-# Rev 0.6.5
+# Rev 0.6.7
 
-"""Phase rules service (Rev 0.6.5)
+"""Phase rules service (Rev 0.6.7)
 Provide allow/deny checks for phase changes.
 """
 from __future__ import annotations

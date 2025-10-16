@@ -1,4 +1,4 @@
-# Rev 0.6.5 — show phase/priority transitions + reason badges
+# Rev 0.6.7 — show phase/priority transitions + reason badges
 # --- keep your imports/constants at top ---
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QFrame, QSizePolicy, QHBoxLayout

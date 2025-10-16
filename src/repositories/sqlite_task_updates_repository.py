@@ -1,4 +1,4 @@
-# Rev 0.6.5 — schema Rev 1.1.0 alignment
+# Rev 0.6.7 — schema Rev 1.1.0 alignment
 from __future__ import annotations
 
 import sqlite3
@@ -9,7 +9,7 @@ class SQLiteTaskUpdatesRepository:
     """
     Read/append timeline entries for task_updates.
 
-    Schema expectation (Rev 0.6.5):
+    Schema expectation (Rev 0.6.7):
 
       task_updates(
         id INTEGER PRIMARY KEY,

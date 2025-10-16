@@ -1,4 +1,4 @@
-# Rev 0.6.5
+# Rev 0.6.7
 """
 Developer seed for M5 CRUD + timeline tests.
 Creates sample projects, phases, and tasks in the SQLite database and prints summaries.

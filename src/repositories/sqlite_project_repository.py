@@ -1,5 +1,5 @@
-# Rev 0.6.5
-# trackerZ – SQLiteProjectRepository (Rev 0.6.5, aligned with schema Rev 1.1.0)
+# Rev 0.6.7
+# trackerZ – SQLiteProjectRepository (Rev 0.6.7, aligned with schema Rev 1.1.0)
 from __future__ import annotations
 import sqlite3
 from typing import List, Dict, Any, Optional

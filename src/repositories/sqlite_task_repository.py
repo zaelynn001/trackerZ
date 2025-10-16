@@ -1,4 +1,4 @@
-# Rev 0.6.5
+# Rev 0.6.7
 from __future__ import annotations
 
 import sqlite3
@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 class SQLiteTaskRepository:
     """
     Task CRUD + filtered listing + mirrored timeline inserts.
-    Updated for schema Rev 0.6.5 (priority_id on tasks;
+    Updated for schema Rev 0.6.7 (priority_id on tasks;
     old_priority_id/new_priority_id on task_updates).
     """
 

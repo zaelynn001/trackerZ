@@ -1,5 +1,5 @@
-# Rev 0.6.5
-# trackerZ – TasksTab (Rev 0.6.5)
+# Rev 0.6.7
+# trackerZ – TasksTab (Rev 0.6.7)
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox
 from ui.tasks_view import TasksView
 

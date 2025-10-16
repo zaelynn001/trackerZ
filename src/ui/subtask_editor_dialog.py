@@ -1,4 +1,4 @@
-# Rev 0.6.5 — Subtask Editor with Phase, Priority, Note
+# Rev 0.6.7 — Subtask Editor with Phase, Priority, Note
 from __future__ import annotations
 from typing import Optional, Tuple
 from PySide6.QtWidgets import (

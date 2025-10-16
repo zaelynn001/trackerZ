@@ -1,5 +1,5 @@
-# Rev 0.6.5
-# Rev 0.7.0 — Overview: proper maximize, no geometry persistence, no setLayout on QMainWindow
+# Rev 0.6.7
+# Rev 0.6.7 — Overview: proper maximize, no geometry persistence, no setLayout on QMainWindow
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QTabWidget, QLabel
 
