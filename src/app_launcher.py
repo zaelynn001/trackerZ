@@ -1,6 +1,6 @@
-# Rev 0.6.7
+# Rev 0.6.8
 
-"""Thin launcher for `python -m src.app_launcher` (Rev 0.6.7)"""
+"""Thin launcher for `python -m src.app_launcher` (Rev 0.6.8)"""
 from __future__ import annotations
 from .main import main
 

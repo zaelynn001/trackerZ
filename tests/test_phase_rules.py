@@ -1,4 +1,4 @@
-# Rev 0.6.7
+# Rev 0.6.8
 
 from __future__ import annotations
 import sqlite3

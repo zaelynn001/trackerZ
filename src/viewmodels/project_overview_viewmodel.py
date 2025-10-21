@@ -1,4 +1,4 @@
-# Rev 0.6.7 — include phase_id, priority_id in emitted info
+# Rev 0.6.8 — include phase_id, priority_id in emitted info
 from __future__ import annotations
 from typing import Optional, Dict, Any
 from PySide6.QtCore import QObject, Signal

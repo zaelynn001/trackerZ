@@ -1,4 +1,4 @@
-# Rev 0.6.7 — ProjectTreePanel (Tasks/Subtasks view by name, ordered by hidden id)
+# Rev 0.6.8 — ProjectTreePanel (Tasks/Subtasks by name; subtasks fetched by task_id only)
 from __future__ import annotations
 from typing import Optional, Iterable, Tuple, Dict, Any
 
@@ -14,7 +14,6 @@ class ProjectTreePanel(QWidget):
     - Project switching remains owned by ProjectsPanel.
     """
 
-    # Optional signals if you want clicks to navigate elsewhere later
     taskActivated = Signal(int)                 # task_id
     subtaskActivated = Signal(int, int)        # task_id, subtask_id
 
@@ -44,9 +43,7 @@ class ProjectTreePanel(QWidget):
     # ------------------- public API -------------------
 
     def set_project(self, project_id: int, project_name: str) -> None:
-        """
-        Bind this sidebar to a single project and render its Tasks/Subtasks.
-        """
+        """Bind this sidebar to a single project and render its Tasks/Subtasks."""
         self._project_id = project_id
         self._project_name = project_name or f"Project {project_id}"
         self._title.setText(self._project_name)
@@ -76,8 +73,8 @@ class ProjectTreePanel(QWidget):
             t_item.setData(0, Qt.UserRole, {"kind": "task", "task_id": tid})
             root.addChild(t_item)
 
-            # Fetch subtasks by id/name (ordered by id)
-            for sid, sname in self._fetch_subtasks(self._project_id, tid):
+            # Fetch subtasks by task_id ONLY (ordered by id)
+            for sid, sname in self._fetch_subtasks(tid):
                 s_item = QTreeWidgetItem([sname or f"Subtask {sid}"])
                 s_item.setData(0, Qt.UserRole, {"kind": "subtask", "task_id": tid, "subtask_id": sid})
                 t_item.addChild(s_item)
@@ -104,7 +101,7 @@ class ProjectTreePanel(QWidget):
         rows: Iterable | None = None
 
         if repo:
-            # Try likely method names across your variants
+            # Try likely method names across variants
             for meth in ("list_tasks_for_project", "list_tasks", "list_project_tasks"):
                 if hasattr(repo, meth):
                     try:
@@ -113,7 +110,6 @@ class ProjectTreePanel(QWidget):
                         rows = getattr(repo, meth)(project_id)            # positional fallback
                     break
             if rows is None and hasattr(repo, "list_tasks_filtered"):
-                # Your code commonly uses list_tasks_filtered(project_id=..., phase_id=...)
                 try:
                     rows = repo.list_tasks_filtered(project_id=project_id, phase_id=None)
                 except TypeError:
@@ -128,11 +124,8 @@ class ProjectTreePanel(QWidget):
                 if isinstance(r, dict):
                     parsed.append((int(r.get("id")), r.get("name", "")))
                 else:
-                    # assume row[0]=id, row[1]=name
-                    tid = int(r[0])
-                    name = r[1] if len(r) > 1 else ""
+                    tid = int(r[0]); name = r[1] if len(r) > 1 else ""
                     parsed.append((tid, name))
-            # order by id
             parsed.sort(key=lambda x: x[0])
             return parsed
 
@@ -144,21 +137,23 @@ class ProjectTreePanel(QWidget):
         cur.execute("SELECT id, name FROM tasks WHERE project_id = ? ORDER BY id ASC", (project_id,))
         return [(int(r[0]), r[1] or "") for r in cur.fetchall()]
 
-    def _fetch_subtasks(self, project_id: int, task_id: int) -> list[tuple[int, str]]:
+    def _fetch_subtasks(self, task_id: int) -> list[tuple[int, str]]:
         """
         Return [(subtask_id, name), ...], ordered by id asc.
+        NOTE: Fetch by task_id ONLY.
         """
         repo = self._subtasks_repo
         rows: Iterable | None = None
 
         if repo:
-            for meth in ("list_subtasks_for_project", "list_subtasks", "list_for_task"):
+            # Prefer explicit task-based APIs if present
+            for meth in ("list_for_task", "list_subtasks_for_task", "list_subtasks"):
                 if hasattr(repo, meth):
                     try:
-                        rows = getattr(repo, meth)(project_id=project_id, task_id=task_id)
+                        rows = getattr(repo, meth)(task_id=task_id)
                     except TypeError:
                         try:
-                            rows = getattr(repo, meth)(project_id, task_id)
+                            rows = getattr(repo, meth)(task_id)
                         except Exception:
                             pass
                     break
@@ -169,23 +164,20 @@ class ProjectTreePanel(QWidget):
                 if isinstance(r, dict):
                     parsed.append((int(r.get("id")), r.get("name", "")))
                 else:
-                    sid = int(r[0])
-                    name = r[1] if len(r) > 1 else ""
+                    sid = int(r[0]); name = r[1] if len(r) > 1 else ""
                     parsed.append((sid, name))
             parsed.sort(key=lambda x: x[0])
             return parsed
 
+        # Raw SQL fallback (task-only)
         con = self._extract_conn(repo or self._projects_repo)
         if con is None:
             return []
         cur = con.cursor()
-        cur.execute(
-            "SELECT id, name FROM subtasks WHERE project_id = ? AND task_id = ? ORDER BY id ASC",
-            (project_id, task_id),
-        )
+        cur.execute("SELECT id, name FROM subtasks WHERE task_id = ? ORDER BY id ASC", (task_id,))
         return [(int(r[0]), r[1] or "") for r in cur.fetchall()]
 
-    # ---------- connection fishing (mirrors your existing pattern) ----------
+    # ---------- connection fishing ----------
 
     def _extract_conn(self, repo):
         if hasattr(repo, "conn"):

@@ -1,4 +1,4 @@
-# Rev 0.6.7 — M6.5 ProjectOverviewPanel (aligned to Rev 0.6.5 tabs)
+# Rev 0.6.8 — M6.5 ProjectOverviewPanel (aligned to Rev 0.6.5 tabs)
 from __future__ import annotations
 from typing import Optional
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTabWidget
@@ -43,9 +43,9 @@ class ProjectOverviewPanel(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.addWidget(self._tabs)
 
-        # Constructor signatures from your Rev 0.6.7 tabs:
-        # - OverviewTab(projects_repo, tasks_repo, subtasks_repo, phases_repo, parent=None)
-        # - TasksTab(tasks_repo, phases_repo, parent=None)
+        # Constructor signatures from your Rev 0.6.8 tabs:
+        OverviewTab(projects_repo, tasks_repo, subtasks_repo, phases_repo, parent=None)
+        TasksTab(tasks_repo, phases_repo, parent=None)
         # - SubtasksTab(subtasks_repo, parent=None)
         # - AttachmentsTab(parent=None)
         # - ExpensesTab(parent=None)

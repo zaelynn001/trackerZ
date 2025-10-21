@@ -1,6 +1,6 @@
-# Rev 0.6.7
+# Rev 0.6.8
 
-# trackerZ – logging setup (Rev 0.6.7)
+# trackerZ – logging setup (Rev 0.6.8)
 from __future__ import annotations
 import logging, os, sys
 from logging.handlers import RotatingFileHandler

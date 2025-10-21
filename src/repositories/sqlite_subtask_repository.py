@@ -1,4 +1,4 @@
-# Rev 0.6.7
+# Rev 0.6.8
 from __future__ import annotations
 import sqlite3
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 class SQLiteSubtaskRepository:
     """
     Subtask CRUD + filtered listing.
-    Now aligned with schema Rev 0.6.7 (priority_id, old/new_priority_id).
+    Now aligned with schema Rev 0.6.8 (priority_id, old/new_priority_id).
     Every subtask change mirrors a timeline entry into subtask_updates,
     and also mirrors a lightweight entry to the parent task's task_updates.
     """

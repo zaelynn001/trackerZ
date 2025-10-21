@@ -1,4 +1,4 @@
-# Rev 0.6.7
+# Rev 0.6.8
 
 # ui/window_mode.py
 from PySide6.QtCore import Qt, QRect

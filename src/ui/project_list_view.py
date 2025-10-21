@@ -1,6 +1,6 @@
-# Rev 0.6.7
+# Rev 0.6.8
 
-# trackerZ – ProjectListView (Rev 0.6.7)
+# trackerZ – ProjectListView (Rev 0.6.8)
 from PySide6.QtCore import Signal, Qt
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QTableView
 

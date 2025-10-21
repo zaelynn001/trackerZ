@@ -1,5 +1,5 @@
-# Rev 0.6.7
-"""Lightweight entities aligned with schema Rev 0.6.7 (phase_id + priority_id)"""
+# Rev 0.6.8
+"""Lightweight entities aligned with schema Rev 0.6.8 (phase_id + priority_id)"""
 from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional

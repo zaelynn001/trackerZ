@@ -1,10 +1,13 @@
-# Rev 0.6.7 — Task Editor with Phase, Priority, Note
+# src/ui/task_editor_dialog.py
+# Rev 0.6.8 — Match SubtaskEditorDialog layout exactly; read-only Name/Desc on edit
 from __future__ import annotations
 from typing import Optional, Tuple
+
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QFormLayout, QLineEdit, QTextEdit,
-    QDialogButtonBox, QComboBox, QLabel
+    QDialogButtonBox, QComboBox, QLabel, QWidget
 )
+from PySide6.QtCore import Qt
 from ui.window_mode import lock_dialog_fixed
 
 _PHASE_NAMES = {1: "Open", 2: "In Progress", 3: "In Hiatus", 4: "Resolved", 5: "Closed"}
@@ -16,47 +19,60 @@ class TaskEditorDialog(QDialog):
     Values returned (see values()):
       name: str
       description: str
-      phase_id: int        # selected phase
-      priority_id: int     # selected priority
-      note: str            # optional ('' if empty)
+      phase_id: int
+      priority_id: int
+      note: str
+
+    UI matches SubtaskEditorDialog (QFormLayout + horizontal rule + lock_dialog_fixed).
+    Name/Description are read-only in edit mode.
     """
 
     def __init__(
         self,
-        parent=None,
+        parent: QWidget | None = None,
         *,
-        name: str = "",
+        title: str = "Task",
+        name: Optional[str] = None,
         description: Optional[str] = None,
         phase_id: int = 1,
         priority_id: int = 2,
-        title: str = "Task"
+        note: Optional[str] = None,
+        mode: Optional[str] = None,  # "create" | "edit" | None (auto)
     ):
         super().__init__(parent)
         self.setWindowTitle(title)
 
-        # fields
-        self._name = QLineEdit(name or "")
+        # Determine edit mode (read-only Name/Desc)
+        self._is_edit = (mode and mode.lower() == "edit") or ("edit" in (title or "").lower())
+
+        # --- fields
+        self._name = QLineEdit((name or "").strip())
+        self._name.setReadOnly(self._is_edit)
+
         self._desc = QTextEdit()
-        if description:
-            self._desc.setPlainText(description)
+        self._desc.setAcceptRichText(False)
+        self._desc.setPlainText((description or "").strip())
+        self._desc.setReadOnly(self._is_edit)
 
         self._cmb_phase = QComboBox()
         for pid, label in _PHASE_NAMES.items():
             self._cmb_phase.addItem(label, pid)
-        i = self._cmb_phase.findData(phase_id or 1)
-        if i >= 0:
-            self._cmb_phase.setCurrentIndex(i)
+        ix = self._cmb_phase.findData(phase_id or 1)
+        if ix >= 0:
+            self._cmb_phase.setCurrentIndex(ix)
 
         self._cmb_priority = QComboBox()
         for prio, label in _PRIORITY_NAMES.items():
             self._cmb_priority.addItem(label, prio)
-        j = self._cmb_priority.findData(priority_id or 2)
-        if j >= 0:
-            self._cmb_priority.setCurrentIndex(j)
+        jx = self._cmb_priority.findData(priority_id or 2)
+        if jx >= 0:
+            self._cmb_priority.setCurrentIndex(jx)
 
-        self._note = QTextEdit()
+        self._note = QTextEdit(note or "")
+        self._note.setAcceptRichText(False)
         self._note.setPlaceholderText("Optional note (will be recorded in the task timeline)")
 
+        # --- layout (mirror subtask editor)
         form = QFormLayout()
         form.addRow("Name:", self._name)
         form.addRow("Description:", self._desc)
@@ -69,11 +85,15 @@ class TaskEditorDialog(QDialog):
         btns.accepted.connect(self.accept)
         btns.rejected.connect(self.reject)
 
-        lay = QVBoxLayout(self)
-        lay.addLayout(form)
-        lay.addWidget(btns)
-        
+        root = QVBoxLayout(self)
+        root.addLayout(form)
+        root.addWidget(btns)
+
+        # Match your dialog sizing behavior
         lock_dialog_fixed(self, width_ratio=0.5, height_ratio=0.6)
+
+        # Focus: first editable control
+        (self._cmb_phase if self._is_edit else self._name).setFocus(Qt.OtherFocusReason)
 
     def values(self) -> Tuple[str, str, int, int, str]:
         name = self._name.text().strip()

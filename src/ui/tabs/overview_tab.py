@@ -1,4 +1,4 @@
-# Rev 0.6.7 — show Project Phase & Priority (schema Rev 1.1.0)
+# Rev 0.6.8 — show Project Phase & Priority (schema Rev 1.1.0)
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QWidget, QLabel, QPushButton, QVBoxLayout, QFormLayout,

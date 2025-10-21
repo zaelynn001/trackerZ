@@ -1,4 +1,4 @@
-# Rev 0.6.7
+# Rev 0.6.8
 from __future__ import annotations
 
 import sqlite3
@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 class SQLiteTaskRepository:
     """
     Task CRUD + filtered listing + mirrored timeline inserts.
-    Updated for schema Rev 0.6.7 (priority_id on tasks;
+    Updated for schema Rev 0.6.8 (priority_id on tasks;
     old_priority_id/new_priority_id on task_updates).
     """
 
@@ -317,3 +317,31 @@ class SQLiteTaskRepository:
         cur.execute(f"SELECT COUNT(1) FROM tasks WHERE {' AND '.join(where)}", params)
         row = cur.fetchone()
         return int(row[0]) if row and row[0] is not None else 0
+        
+    def get_task(self, task_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Return a single task row as a dict, or None if not found.
+        Columns: id, project_id, name, description, phase_id, priority_id, created_at_utc, updated_at_utc
+        """
+        con = self._conn()
+        cur = con.cursor()
+        cur.execute("""
+            SELECT id, project_id, name, description, phase_id, priority_id, created_at_utc, updated_at_utc
+            FROM tasks
+            WHERE id = ?
+            LIMIT 1
+        """, (task_id,))
+        row = cur.fetchone()
+        if not row:
+            return None
+        return {
+            "id": row[0],
+            "project_id": row[1],
+            "name": row[2],
+            "description": row[3] or "",
+            "phase_id": row[4],
+            "priority_id": row[5],
+            "created_at_utc": row[6],
+            "updated_at_utc": row[7],
+        }
+

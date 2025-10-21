@@ -1,6 +1,6 @@
-# Rev 0.6.7
+# Rev 0.6.8
 
-"""Diagnostics panel dock (Rev 0.6.7)"""
+"""Diagnostics panel dock (Rev 0.6.8)"""
 from __future__ import annotations
 from PySide6.QtWidgets import QDockWidget, QWidget, QVBoxLayout, QPushButton, QTextEdit
 from PySide6.QtCore import Qt

@@ -1,4 +1,4 @@
-# Rev 0.6.7
+# Rev 0.6.8
 
 # =========================
 # File: src/ui/workspace.py

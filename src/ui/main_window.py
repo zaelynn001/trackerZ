@@ -1,4 +1,4 @@
-# Rev 0.6.7 — M6.5 Workspace (+ Project Tree Dock)
+# Rev 0.6.8 — M6.5 Workspace (+ Project Tree Dock)
 
 from __future__ import annotations
 from collections import deque
